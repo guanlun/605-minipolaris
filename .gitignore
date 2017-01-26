@@ -1,0 +1,6 @@
+*.so
+*.so.1
+*.o
+*~
+*.swp
+mini_polaris
