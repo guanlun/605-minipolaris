@@ -10,6 +10,7 @@
 #include "Statement/EndIfStmt.h"
 #include "Statement/GotoStmt.h"
 #include "Expression/BinaryExpr.h"
+#include "utilities/precalc_util.h"
 
 using std::cout;
 using std::endl;
@@ -66,6 +67,18 @@ void convert_computed_gotos(ProgramUnit& pgm) {
         iter.valid();
         ++iter) {
         Statement& computedGotoStmt = iter.current();
+
+        if (!computedGotoStmt.expr().is_side_effect_free()) {
+            Expression* precalcExpr = get_precalc(
+                computedGotoStmt.expr().clone(), 
+                pgm, 
+                computedGotoStmt,
+                PRECALC_ALWAYS,
+                statements.new_tag()
+            );
+
+            computedGotoStmt.expr(precalcExpr);
+        }
 
         Expression& predicate = computedGotoStmt.expr();
 
