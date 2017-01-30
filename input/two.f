@@ -8,7 +8,7 @@
       ELSE
         GOTO (20,40,20,30,10) J*3
       ENDIF
-      IF (J) 10,30,20
+      IF (F(J)) 10,30,20
         PRINT *, J
         STOP
 10    CONTINUE

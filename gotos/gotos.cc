@@ -23,8 +23,6 @@ void convert_arithmetic_ifs(ProgramUnit& pgm) {
         ++iter) {
         Statement& aIfStmt = iter.current();
 
-        Expression& predicate = aIfStmt.expr();
-
         RefList<Statement> labelList = aIfStmt.label_list();
 
         Statement& ltStmt = labelList[0];
@@ -33,8 +31,19 @@ void convert_arithmetic_ifs(ProgramUnit& pgm) {
 
         Expression* zero = constant(0);
 
-        if (!predicate.is_side_effect_free()) {
+        if (!aIfStmt.expr().is_side_effect_free()) {
+            Expression* precalcExpr = get_precalc(
+                aIfStmt.expr().clone(), 
+                pgm, 
+                aIfStmt,
+                PRECALC_ALWAYS,
+                statements.new_tag()
+            );
+
+            aIfStmt.expr(precalcExpr);
         }
+
+        Expression& predicate = aIfStmt.expr();
 
         BinaryExpr* ltCmprExpr = new BinaryExpr(LT_OP, 
             expr_type(LT_OP, predicate.type(), zero->type()), 
