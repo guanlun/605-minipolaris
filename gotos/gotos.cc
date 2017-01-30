@@ -5,12 +5,13 @@
 #include "gotos.h"
 #include "StmtList.h"
 #include "Collection/List.h"
-#include  "Statement/Statement.h"
+#include "Statement/Statement.h"
 #include "Statement/ArithmeticIfStmt.h"
 #include "Statement/LabelStmt.h"
 #include "Statement/IfStmt.h"
 #include "Statement/EndIfStmt.h"
 #include "Statement/GotoStmt.h"
+#include "Expression/BinaryExpr.h"
 
 using std::cout;
 using std::endl;
@@ -27,19 +28,33 @@ void convert_gotos(ProgramUnit & pgm) {
 
         RefList<Statement> labelList = aIfStmt.label_list();
 
-        LabelStmt& gtStmt = dynamic_cast<LabelStmt&>(labelList[0]);
-        LabelStmt& ltStmt = dynamic_cast<LabelStmt&>(labelList[1]);
-        LabelStmt& eqStmt = dynamic_cast<LabelStmt&>(labelList[2]);
+        LabelStmt& ltStmt = dynamic_cast<LabelStmt&>(labelList[0]);
+        LabelStmt& eqStmt = dynamic_cast<LabelStmt&>(labelList[1]);
+        LabelStmt& gtStmt = dynamic_cast<LabelStmt&>(labelList[2]);
 
-        gtStmt.print(cout);
-        ltStmt.print(cout);
-        eqStmt.print(cout);
+        Expression* zero = constant(0);
 
-        Statement* gotoStmt = new GotoStmt(statements.new_tag(), &gtStmt);
+        BinaryExpr* ltCmprExpr = new BinaryExpr(LT_OP, 
+            expr_type(LT_OP, predicate.type(), zero->type()), 
+            predicate.clone(), 
+            zero->clone()
+        );
 
-        Statement& newIfStmt = statements.ins_IF_after(predicate.clone(), &aIfStmt);
+        BinaryExpr* eqCmprExpr = new BinaryExpr(EQ_OP, 
+            expr_type(EQ_OP, predicate.type(), zero->type()), 
+            predicate.clone(), 
+            zero->clone()
+        );
 
-        statements.ins_after(gotoStmt, &newIfStmt);
+        Statement& ltBranchIfStmt = statements.ins_IF_after(ltCmprExpr, &aIfStmt);
+        Statement& eqBranchElseIfStmt = statements.ins_ELSEIF_after(eqCmprExpr, &ltBranchIfStmt);
+        Statement& gtBranchElseStmt = statements.ins_ELSE_after(&ltBranchIfStmt);
+
+        statements.ins_after(new GotoStmt(statements.new_tag(), &ltStmt), &ltBranchIfStmt);
+        statements.ins_after(new GotoStmt(statements.new_tag(), &eqStmt), &eqBranchElseIfStmt);
+        statements.ins_after(new GotoStmt(statements.new_tag(), &gtStmt), &gtBranchElseStmt);
+
+        statements.del(aIfStmt);
 
 
         /*
