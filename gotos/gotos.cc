@@ -6,8 +6,6 @@
 #include "StmtList.h"
 #include "Collection/List.h"
 #include "Statement/Statement.h"
-#include "Statement/ArithmeticIfStmt.h"
-#include "Statement/LabelStmt.h"
 #include "Statement/IfStmt.h"
 #include "Statement/EndIfStmt.h"
 #include "Statement/GotoStmt.h"
@@ -16,23 +14,26 @@
 using std::cout;
 using std::endl;
 
-void convert_gotos(ProgramUnit & pgm) {
+void convert_arithmetic_ifs(ProgramUnit& pgm) {
     StmtList& statements = pgm.stmts();
 
     for (Iterator<Statement> iter = statements.stmts_of_type(ARITHMETIC_IF_STMT);
         iter.valid();
         ++iter) {
-        ArithmeticIfStmt& aIfStmt = dynamic_cast<ArithmeticIfStmt&>(iter.current());
+        Statement& aIfStmt = iter.current();
 
         Expression& predicate = aIfStmt.expr();
 
         RefList<Statement> labelList = aIfStmt.label_list();
 
-        LabelStmt& ltStmt = dynamic_cast<LabelStmt&>(labelList[0]);
-        LabelStmt& eqStmt = dynamic_cast<LabelStmt&>(labelList[1]);
-        LabelStmt& gtStmt = dynamic_cast<LabelStmt&>(labelList[2]);
+        Statement& ltStmt = labelList[0];
+        Statement& eqStmt = labelList[1];
+        Statement& gtStmt = labelList[2];
 
         Expression* zero = constant(0);
+
+        if (!predicate.is_side_effect_free()) {
+        }
 
         BinaryExpr* ltCmprExpr = new BinaryExpr(LT_OP, 
             expr_type(LT_OP, predicate.type(), zero->type()), 
@@ -55,11 +56,53 @@ void convert_gotos(ProgramUnit & pgm) {
         statements.ins_after(new GotoStmt(statements.new_tag(), &gtStmt), &gtBranchElseStmt);
 
         statements.del(aIfStmt);
-
-
-        /*
-        const Statement* nextStmt = statements.next_ref(aIfStmt);
-        cout << nextStmt->stmt_class() << endl;
-        */
     }
+}
+
+void convert_computed_gotos(ProgramUnit& pgm) {
+    StmtList& statements = pgm.stmts();
+
+    for (Iterator<Statement> iter = statements.stmts_of_type(COMPUTED_GOTO_STMT);
+        iter.valid();
+        ++iter) {
+        Statement& computedGotoStmt = iter.current();
+
+        Expression& predicate = computedGotoStmt.expr();
+
+        RefList<Statement>& labelList = computedGotoStmt.label_list();
+
+        Statement* prevStmt = &computedGotoStmt;
+
+        int numEntries = labelList.entries();
+        for (int i = 0; i < numEntries; i++) {
+            Statement& labelItem = labelList[i];
+
+            Expression* cmprConst = constant(i + 1);
+
+            BinaryExpr* eqCmprExpr = new BinaryExpr(EQ_OP, 
+                expr_type(EQ_OP, predicate.type(), cmprConst->type()), 
+                predicate.clone(), 
+                cmprConst->clone()
+            );
+
+            Statement* branchStmt;
+
+            if (i == 0) {
+                branchStmt = &statements.ins_IF_after(eqCmprExpr, prevStmt);
+                prevStmt = branchStmt;
+
+            } else {
+                branchStmt = &statements.ins_ELSEIF_after(eqCmprExpr, prevStmt);
+            }
+
+            statements.ins_after(new GotoStmt(statements.new_tag(), &labelItem), branchStmt);
+        }
+
+        statements.del(computedGotoStmt);
+    }
+}
+
+void convert_gotos(ProgramUnit& pgm) {
+    convert_arithmetic_ifs(pgm);
+    convert_computed_gotos(pgm);
 };
