@@ -1,0 +1,656 @@
+AFTER SCAN
+FILE: input/two.f
+            EXTERNAL f
+            INTEGER*4 i, j
+            REAL*8 f
+  S26       FLOWENTRY
+                 {succ = S1, line = 1,  }
+   S1       ENTRY testme()
+                 {succ = S2, pred = S26, line = 1,  }
+   S2       READ ([FMT, *]) i, j
+                 {succ = S3, pred = S1, out_refs = i, j, line = 5,  }
+   S3       IF (i.LT.10) THEN
+                  {  follow = S5,   matching_endif = S7, succ = S4, S5, 
+              *pred = S2, in_refs = i, line = 6,  }
+   S4       GOTO (S14, S19, S14, S16, S11) i+f(j)
+                 {succ = S25, S14, S19, S16, S11, pred = S3, in_refs = i
+              *, j, out_refs = j, act_refs = j, line = 7,  }
+  S25       IMPLIED_GOTO 
+                  {  follow = S7, succ = S7, pred = S4, line = 8,  }
+   S5       ELSE 
+                  {  follow = S7, lead = S3, succ = S6, pred = S3, line 
+              *= 8,  }
+   S6       GOTO (S14, S19, S14, S16, S11) j*3
+                 {succ = S24, S14, S19, S16, S11, pred = S5, in_refs = j
+              *, line = 9,  }
+  S24       IMPLIED_GOTO 
+                  {  follow = S7, succ = S7, pred = S6, line = 10,  }
+   S7       ENDIF 
+                  {  matching_if = S3, lead = S3, succ = S8, pred = S25,
+              * S24, line = 10,  }
+   S8       IF (f(j)) S11, S16, S14
+                 {succ = S11, S16, S14, pred = S7, in_refs = j, out_refs
+              * = j, act_refs = j, line = 11,  }
+   S9       PRINT ([FMT, *]) j
+                 {succ = S10, in_refs = j, line = 12,  }
+  S10       STOP 
+                 {succ = S22, pred = S9, line = 13,  }
+  S11    10 LABEL 10
+                 {succ = S12, pred = S4, S6, S8, line = 14,  }
+  S12       j = j+3
+                 {succ = S13, pred = S11, in_refs = j, out_refs = j, lin
+              *e = 15,  }
+  S13       GOTO S16
+                 {succ = S16, pred = S12, line = 16,  }
+  S14    20 LABEL 20
+                 {succ = S15, pred = S4, S6, S8, line = 17,  }
+  S15       PRINT ([FMT, *]) 'BLAH'
+                 {succ = S16, pred = S14, line = 18,  }
+  S16    30 LABEL 30
+                 {succ = S17, pred = S4, S6, S8, S13, S15, line = 19,  }
+  S17       PRINT ([FMT, *]) j
+                 {succ = S18, pred = S16, in_refs = j, line = 20,  }
+  S18       STOP 
+                 {succ = S22, pred = S17, line = 21,  }
+  S19    40 LABEL 40
+                 {succ = S20, pred = S4, S6, line = 22,  }
+  S20       PRINT ([FMT, *]) i
+                 {succ = S21, pred = S19, in_refs = i, line = 23,  }
+  S21       STOP 
+                 {succ = S22, pred = S20, line = 25,  }
+  S22       FLOWEXIT
+                 {pred = S10, S18, S21, line = 26,  }
+AFTER CONVERT GOTOS
+FILE: input/two.f
+            EXTERNAL f
+            INTEGER*4 i, j
+            REAL*8 f, st27, st39
+  S26       FLOWENTRY
+                 {succ = S1, line = 1,  }
+   S1       ENTRY testme()
+                 {succ = S2, pred = S26, line = 1,  }
+   S2       READ ([FMT, *]) i, j
+                 {succ = S3, pred = S1, out_refs = i, j, line = 5,  }
+   S3       IF (i.LT.10) THEN
+                  {  follow = S5,   matching_endif = S7, succ = ST40, S5
+              *, pred = S2, in_refs = i, line = 6,  }
+ ST40       st39 = i+f(j)
+                 {succ = ST41, pred = S3, in_refs = i, j, out_refs = j, 
+              *st39, act_refs = j,  }
+ ST41       IF (st39.EQ.1) THEN
+                  {  follow = ST45,   matching_endif = ST43, succ = ST44
+              *, ST45, pred = ST40, in_refs = st39,  }
+ ST44       GOTO S14
+                 {succ = S14, pred = ST41,  }
+ ST46       IMPLIED_GOTO 
+                  {  follow = ST43, succ = ST43,  }
+ ST45       ELSEIF (st39.EQ.2) THEN
+                  {  follow = ST48, lead = ST41, succ = ST47, ST48, pred
+              * = ST41, in_refs = st39,  }
+ ST47       GOTO S19
+                 {succ = S19, pred = ST45,  }
+ ST49       IMPLIED_GOTO 
+                  {  follow = ST43, succ = ST43,  }
+ ST48       ELSEIF (st39.EQ.3) THEN
+                  {  follow = ST51, lead = ST45, succ = ST50, ST51, pred
+              * = ST45, in_refs = st39,  }
+ ST50       GOTO S14
+                 {succ = S14, pred = ST48,  }
+ ST52       IMPLIED_GOTO 
+                  {  follow = ST43, succ = ST43,  }
+ ST51       ELSEIF (st39.EQ.4) THEN
+                  {  follow = ST54, lead = ST48, succ = ST53, ST54, pred
+              * = ST48, in_refs = st39,  }
+ ST53       GOTO S16
+                 {succ = S16, pred = ST51,  }
+ ST55       IMPLIED_GOTO 
+                  {  follow = ST43, succ = ST43,  }
+ ST54       ELSEIF (st39.EQ.5) THEN
+                  {  follow = ST43, lead = ST51, succ = ST56, ST43, pred
+              * = ST51, in_refs = st39,  }
+ ST56       GOTO S11
+                 {succ = S11, pred = ST54,  }
+ ST42       IMPLIED_GOTO 
+                  {  follow = ST43, succ = ST43,  }
+ ST43       ENDIF 
+                  {  matching_if = ST41, lead = ST41, succ = S25, pred =
+              * ST42, ST46, ST49, ST52, ST55, ST54,  }
+  S25       IMPLIED_GOTO 
+                  {  follow = S7, succ = S7, pred = ST43, line = 8,  }
+   S5       ELSE 
+                  {  follow = S7, lead = S3, succ = ST57, pred = S3, lin
+              *e = 8,  }
+ ST57       IF (j*3.EQ.1) THEN
+                  {  follow = ST61,   matching_endif = ST59, succ = ST60
+              *, ST61, pred = S5, in_refs = j,  }
+ ST60       GOTO S14
+                 {succ = S14, pred = ST57,  }
+ ST62       IMPLIED_GOTO 
+                  {  follow = ST59, succ = ST59,  }
+ ST61       ELSEIF (j*3.EQ.2) THEN
+                  {  follow = ST64, lead = ST57, succ = ST63, ST64, pred
+              * = ST57, in_refs = j,  }
+ ST63       GOTO S19
+                 {succ = S19, pred = ST61,  }
+ ST65       IMPLIED_GOTO 
+                  {  follow = ST59, succ = ST59,  }
+ ST64       ELSEIF (j*3.EQ.3) THEN
+                  {  follow = ST67, lead = ST61, succ = ST66, ST67, pred
+              * = ST61, in_refs = j,  }
+ ST66       GOTO S14
+                 {succ = S14, pred = ST64,  }
+ ST68       IMPLIED_GOTO 
+                  {  follow = ST59, succ = ST59,  }
+ ST67       ELSEIF (j*3.EQ.4) THEN
+                  {  follow = ST70, lead = ST64, succ = ST69, ST70, pred
+              * = ST64, in_refs = j,  }
+ ST69       GOTO S16
+                 {succ = S16, pred = ST67,  }
+ ST71       IMPLIED_GOTO 
+                  {  follow = ST59, succ = ST59,  }
+ ST70       ELSEIF (j*3.EQ.5) THEN
+                  {  follow = ST59, lead = ST67, succ = ST72, ST59, pred
+              * = ST67, in_refs = j,  }
+ ST72       GOTO S11
+                 {succ = S11, pred = ST70,  }
+ ST58       IMPLIED_GOTO 
+                  {  follow = ST59, succ = ST59,  }
+ ST59       ENDIF 
+                  {  matching_if = ST57, lead = ST57, succ = S24, pred =
+              * ST58, ST62, ST65, ST68, ST71, ST70,  }
+  S24       IMPLIED_GOTO 
+                  {  follow = S7, succ = S7, pred = ST59, line = 10,  }
+   S7       ENDIF 
+                  {  matching_if = S3, lead = S3, succ = ST28, pred = S2
+              *5, S24, line = 10,  }
+ ST28       st27 = f(j)
+                 {succ = ST29, pred = S7, in_refs = j, out_refs = j, st2
+              *7, act_refs = j,  }
+ ST29       IF (st27.LT.0) THEN
+                  {  follow = ST32,   matching_endif = ST31, succ = ST36
+              *, ST32, pred = ST28, in_refs = st27,  }
+ ST36       GOTO S11
+                 {succ = S11, pred = ST29,  }
+ ST33       IMPLIED_GOTO 
+                  {  follow = ST31, succ = ST31,  }
+ ST32       ELSEIF (st27.EQ.0) THEN
+                  {  follow = ST34, lead = ST29, succ = ST37, ST34, pred
+              * = ST29, in_refs = st27,  }
+ ST37       GOTO S16
+                 {succ = S16, pred = ST32,  }
+ ST35       IMPLIED_GOTO 
+                  {  follow = ST31, succ = ST31,  }
+ ST34       ELSE 
+                  {  follow = ST31, lead = ST32, succ = ST38, pred = ST3
+              *2,  }
+ ST38       GOTO S14
+                 {succ = S14, pred = ST34,  }
+ ST30       IMPLIED_GOTO 
+                  {  follow = ST31, succ = ST31,  }
+ ST31       ENDIF 
+                  {  matching_if = ST29, lead = ST29, succ = S9, pred = 
+              *ST30, ST33, ST35,  }
+   S9       PRINT ([FMT, *]) j
+                 {succ = S10, pred = ST31, in_refs = j, line = 12,  }
+  S10       STOP 
+                 {succ = S22, pred = S9, line = 13,  }
+  S11    10 LABEL 10
+                 {succ = S12, pred = ST36, ST56, ST72, line = 14,  }
+  S12       j = j+3
+                 {succ = S13, pred = S11, in_refs = j, out_refs = j, lin
+              *e = 15,  }
+  S13       GOTO S16
+                 {succ = S16, pred = S12, line = 16,  }
+  S14    20 LABEL 20
+                 {succ = S15, pred = ST38, ST44, ST50, ST60, ST66, line 
+              *= 17,  }
+  S15       PRINT ([FMT, *]) 'BLAH'
+                 {succ = S16, pred = S14, line = 18,  }
+  S16    30 LABEL 30
+                 {succ = S17, pred = S13, S15, ST37, ST53, ST69, line = 
+              *19,  }
+  S17       PRINT ([FMT, *]) j
+                 {succ = S18, pred = S16, in_refs = j, line = 20,  }
+  S18       STOP 
+                 {succ = S22, pred = S17, line = 21,  }
+  S19    40 LABEL 40
+                 {succ = S20, pred = ST47, ST63, line = 22,  }
+  S20       PRINT ([FMT, *]) i
+                 {succ = S21, pred = S19, in_refs = i, line = 23,  }
+  S21       STOP 
+                 {succ = S22, pred = S20, line = 25,  }
+  S22       FLOWEXIT
+                 {pred = S10, S18, S21, line = 26,  }
+AFTER SUBEXPR
+FILE: input/two.f
+            EXTERNAL f
+            INTEGER*4 i, j
+            REAL*8 f, st27, st39
+  S26       FLOWENTRY
+                 {succ = S1, line = 1,  }
+   S1       ENTRY testme()
+                 {succ = S2, pred = S26, line = 1,  }
+   S2       READ ([FMT, *]) i, j
+                 {succ = S3, pred = S1, out_refs = i, j, line = 5,  }
+   S3       IF (i.LT.10) THEN
+                  {  follow = S5,   matching_endif = S7, succ = ST40, S5
+              *, pred = S2, in_refs = i, line = 6,  }
+ ST40       st39 = i+f(j)
+                 {succ = ST41, pred = S3, in_refs = i, j, out_refs = j, 
+              *st39, act_refs = j,  }
+ ST41       IF (st39.EQ.1) THEN
+                  {  follow = ST45,   matching_endif = ST43, succ = ST44
+              *, ST45, pred = ST40, in_refs = st39,  }
+ ST44       GOTO S14
+                 {succ = S14, pred = ST41,  }
+ ST46       IMPLIED_GOTO 
+                  {  follow = ST43, succ = ST43,  }
+ ST45       ELSEIF (st39.EQ.2) THEN
+                  {  follow = ST48, lead = ST41, succ = ST47, ST48, pred
+              * = ST41, in_refs = st39,  }
+ ST47       GOTO S19
+                 {succ = S19, pred = ST45,  }
+ ST49       IMPLIED_GOTO 
+                  {  follow = ST43, succ = ST43,  }
+ ST48       ELSEIF (st39.EQ.3) THEN
+                  {  follow = ST51, lead = ST45, succ = ST50, ST51, pred
+              * = ST45, in_refs = st39,  }
+ ST50       GOTO S14
+                 {succ = S14, pred = ST48,  }
+ ST52       IMPLIED_GOTO 
+                  {  follow = ST43, succ = ST43,  }
+ ST51       ELSEIF (st39.EQ.4) THEN
+                  {  follow = ST54, lead = ST48, succ = ST53, ST54, pred
+              * = ST48, in_refs = st39,  }
+ ST53       GOTO S16
+                 {succ = S16, pred = ST51,  }
+ ST55       IMPLIED_GOTO 
+                  {  follow = ST43, succ = ST43,  }
+ ST54       ELSEIF (st39.EQ.5) THEN
+                  {  follow = ST43, lead = ST51, succ = ST56, ST43, pred
+              * = ST51, in_refs = st39,  }
+ ST56       GOTO S11
+                 {succ = S11, pred = ST54,  }
+ ST42       IMPLIED_GOTO 
+                  {  follow = ST43, succ = ST43,  }
+ ST43       ENDIF 
+                  {  matching_if = ST41, lead = ST41, succ = S25, pred =
+              * ST42, ST46, ST49, ST52, ST55, ST54,  }
+  S25       IMPLIED_GOTO 
+                  {  follow = S7, succ = S7, pred = ST43, line = 8,  }
+   S5       ELSE 
+                  {  follow = S7, lead = S3, succ = ST57, pred = S3, lin
+              *e = 8,  }
+ ST57       IF (j*3.EQ.1) THEN
+                  {  follow = ST61,   matching_endif = ST59, succ = ST60
+              *, ST61, pred = S5, in_refs = j,  }
+ ST60       GOTO S14
+                 {succ = S14, pred = ST57,  }
+ ST62       IMPLIED_GOTO 
+                  {  follow = ST59, succ = ST59,  }
+ ST61       ELSEIF (j*3.EQ.2) THEN
+                  {  follow = ST64, lead = ST57, succ = ST63, ST64, pred
+              * = ST57, in_refs = j,  }
+ ST63       GOTO S19
+                 {succ = S19, pred = ST61,  }
+ ST65       IMPLIED_GOTO 
+                  {  follow = ST59, succ = ST59,  }
+ ST64       ELSEIF (j*3.EQ.3) THEN
+                  {  follow = ST67, lead = ST61, succ = ST66, ST67, pred
+              * = ST61, in_refs = j,  }
+ ST66       GOTO S14
+                 {succ = S14, pred = ST64,  }
+ ST68       IMPLIED_GOTO 
+                  {  follow = ST59, succ = ST59,  }
+ ST67       ELSEIF (j*3.EQ.4) THEN
+                  {  follow = ST70, lead = ST64, succ = ST69, ST70, pred
+              * = ST64, in_refs = j,  }
+ ST69       GOTO S16
+                 {succ = S16, pred = ST67,  }
+ ST71       IMPLIED_GOTO 
+                  {  follow = ST59, succ = ST59,  }
+ ST70       ELSEIF (j*3.EQ.5) THEN
+                  {  follow = ST59, lead = ST67, succ = ST72, ST59, pred
+              * = ST67, in_refs = j,  }
+ ST72       GOTO S11
+                 {succ = S11, pred = ST70,  }
+ ST58       IMPLIED_GOTO 
+                  {  follow = ST59, succ = ST59,  }
+ ST59       ENDIF 
+                  {  matching_if = ST57, lead = ST57, succ = S24, pred =
+              * ST58, ST62, ST65, ST68, ST71, ST70,  }
+  S24       IMPLIED_GOTO 
+                  {  follow = S7, succ = S7, pred = ST59, line = 10,  }
+   S7       ENDIF 
+                  {  matching_if = S3, lead = S3, succ = ST28, pred = S2
+              *5, S24, line = 10,  }
+ ST28       st27 = f(j)
+                 {succ = ST29, pred = S7, in_refs = j, out_refs = j, st2
+              *7, act_refs = j,  }
+ ST29       IF (st27.LT.0) THEN
+                  {  follow = ST32,   matching_endif = ST31, succ = ST36
+              *, ST32, pred = ST28, in_refs = st27,  }
+ ST36       GOTO S11
+                 {succ = S11, pred = ST29,  }
+ ST33       IMPLIED_GOTO 
+                  {  follow = ST31, succ = ST31,  }
+ ST32       ELSEIF (st27.EQ.0) THEN
+                  {  follow = ST34, lead = ST29, succ = ST37, ST34, pred
+              * = ST29, in_refs = st27,  }
+ ST37       GOTO S16
+                 {succ = S16, pred = ST32,  }
+ ST35       IMPLIED_GOTO 
+                  {  follow = ST31, succ = ST31,  }
+ ST34       ELSE 
+                  {  follow = ST31, lead = ST32, succ = ST38, pred = ST3
+              *2,  }
+ ST38       GOTO S14
+                 {succ = S14, pred = ST34,  }
+ ST30       IMPLIED_GOTO 
+                  {  follow = ST31, succ = ST31,  }
+ ST31       ENDIF 
+                  {  matching_if = ST29, lead = ST29, succ = S9, pred = 
+              *ST30, ST33, ST35,  }
+   S9       PRINT ([FMT, *]) j
+                 {succ = S10, pred = ST31, in_refs = j, line = 12,  }
+  S10       STOP 
+                 {succ = S22, pred = S9, line = 13,  }
+  S11    10 LABEL 10
+                 {succ = S12, pred = ST36, ST56, ST72, line = 14,  }
+  S12       j = j+3
+                 {succ = S13, pred = S11, in_refs = j, out_refs = j, lin
+              *e = 15,  }
+  S13       GOTO S16
+                 {succ = S16, pred = S12, line = 16,  }
+  S14    20 LABEL 20
+                 {succ = S15, pred = ST38, ST44, ST50, ST60, ST66, line 
+              *= 17,  }
+  S15       PRINT ([FMT, *]) 'BLAH'
+                 {succ = S16, pred = S14, line = 18,  }
+  S16    30 LABEL 30
+                 {succ = S17, pred = S13, S15, ST37, ST53, ST69, line = 
+              *19,  }
+  S17       PRINT ([FMT, *]) j
+                 {succ = S18, pred = S16, in_refs = j, line = 20,  }
+  S18       STOP 
+                 {succ = S22, pred = S17, line = 21,  }
+  S19    40 LABEL 40
+                 {succ = S20, pred = ST47, ST63, line = 22,  }
+  S20       PRINT ([FMT, *]) i
+                 {succ = S21, pred = S19, in_refs = i, line = 23,  }
+  S21       STOP 
+                 {succ = S22, pred = S20, line = 25,  }
+  S22       FLOWEXIT
+                 {pred = S10, S18, S21, line = 26,  }
+AFTER DD Test
+FILE: input/two.f
+            EXTERNAL f
+            INTEGER*4 i, j
+            REAL*8 f, st27, st39
+  S26       FLOWENTRY
+                 {succ = S1, line = 1,  }
+   S1       ENTRY testme()
+                 {succ = S2, pred = S26, line = 1,  }
+   S2       READ ([FMT, *]) i, j
+                 {succ = S3, pred = S1, out_refs = i, j, line = 5,  }
+   S3       IF (i.LT.10) THEN
+                  {  follow = S5,   matching_endif = S7, succ = ST40, S5
+              *, pred = S2, in_refs = i, line = 6,  }
+ ST40       st39 = i+f(j)
+                 {succ = ST41, pred = S3, in_refs = i, j, out_refs = j, 
+              *st39, act_refs = j,  }
+ ST41       IF (st39.EQ.1) THEN
+                  {  follow = ST45,   matching_endif = ST43, succ = ST44
+              *, ST45, pred = ST40, in_refs = st39,  }
+ ST44       GOTO S14
+                 {succ = S14, pred = ST41,  }
+ ST46       IMPLIED_GOTO 
+                  {  follow = ST43, succ = ST43,  }
+ ST45       ELSEIF (st39.EQ.2) THEN
+                  {  follow = ST48, lead = ST41, succ = ST47, ST48, pred
+              * = ST41, in_refs = st39,  }
+ ST47       GOTO S19
+                 {succ = S19, pred = ST45,  }
+ ST49       IMPLIED_GOTO 
+                  {  follow = ST43, succ = ST43,  }
+ ST48       ELSEIF (st39.EQ.3) THEN
+                  {  follow = ST51, lead = ST45, succ = ST50, ST51, pred
+              * = ST45, in_refs = st39,  }
+ ST50       GOTO S14
+                 {succ = S14, pred = ST48,  }
+ ST52       IMPLIED_GOTO 
+                  {  follow = ST43, succ = ST43,  }
+ ST51       ELSEIF (st39.EQ.4) THEN
+                  {  follow = ST54, lead = ST48, succ = ST53, ST54, pred
+              * = ST48, in_refs = st39,  }
+ ST53       GOTO S16
+                 {succ = S16, pred = ST51,  }
+ ST55       IMPLIED_GOTO 
+                  {  follow = ST43, succ = ST43,  }
+ ST54       ELSEIF (st39.EQ.5) THEN
+                  {  follow = ST43, lead = ST51, succ = ST56, ST43, pred
+              * = ST51, in_refs = st39,  }
+ ST56       GOTO S11
+                 {succ = S11, pred = ST54,  }
+ ST42       IMPLIED_GOTO 
+                  {  follow = ST43, succ = ST43,  }
+ ST43       ENDIF 
+                  {  matching_if = ST41, lead = ST41, succ = S25, pred =
+              * ST42, ST46, ST49, ST52, ST55, ST54,  }
+  S25       IMPLIED_GOTO 
+                  {  follow = S7, succ = S7, pred = ST43, line = 8,  }
+   S5       ELSE 
+                  {  follow = S7, lead = S3, succ = ST57, pred = S3, lin
+              *e = 8,  }
+ ST57       IF (j*3.EQ.1) THEN
+                  {  follow = ST61,   matching_endif = ST59, succ = ST60
+              *, ST61, pred = S5, in_refs = j,  }
+ ST60       GOTO S14
+                 {succ = S14, pred = ST57,  }
+ ST62       IMPLIED_GOTO 
+                  {  follow = ST59, succ = ST59,  }
+ ST61       ELSEIF (j*3.EQ.2) THEN
+                  {  follow = ST64, lead = ST57, succ = ST63, ST64, pred
+              * = ST57, in_refs = j,  }
+ ST63       GOTO S19
+                 {succ = S19, pred = ST61,  }
+ ST65       IMPLIED_GOTO 
+                  {  follow = ST59, succ = ST59,  }
+ ST64       ELSEIF (j*3.EQ.3) THEN
+                  {  follow = ST67, lead = ST61, succ = ST66, ST67, pred
+              * = ST61, in_refs = j,  }
+ ST66       GOTO S14
+                 {succ = S14, pred = ST64,  }
+ ST68       IMPLIED_GOTO 
+                  {  follow = ST59, succ = ST59,  }
+ ST67       ELSEIF (j*3.EQ.4) THEN
+                  {  follow = ST70, lead = ST64, succ = ST69, ST70, pred
+              * = ST64, in_refs = j,  }
+ ST69       GOTO S16
+                 {succ = S16, pred = ST67,  }
+ ST71       IMPLIED_GOTO 
+                  {  follow = ST59, succ = ST59,  }
+ ST70       ELSEIF (j*3.EQ.5) THEN
+                  {  follow = ST59, lead = ST67, succ = ST72, ST59, pred
+              * = ST67, in_refs = j,  }
+ ST72       GOTO S11
+                 {succ = S11, pred = ST70,  }
+ ST58       IMPLIED_GOTO 
+                  {  follow = ST59, succ = ST59,  }
+ ST59       ENDIF 
+                  {  matching_if = ST57, lead = ST57, succ = S24, pred =
+              * ST58, ST62, ST65, ST68, ST71, ST70,  }
+  S24       IMPLIED_GOTO 
+                  {  follow = S7, succ = S7, pred = ST59, line = 10,  }
+   S7       ENDIF 
+                  {  matching_if = S3, lead = S3, succ = ST28, pred = S2
+              *5, S24, line = 10,  }
+ ST28       st27 = f(j)
+                 {succ = ST29, pred = S7, in_refs = j, out_refs = j, st2
+              *7, act_refs = j,  }
+ ST29       IF (st27.LT.0) THEN
+                  {  follow = ST32,   matching_endif = ST31, succ = ST36
+              *, ST32, pred = ST28, in_refs = st27,  }
+ ST36       GOTO S11
+                 {succ = S11, pred = ST29,  }
+ ST33       IMPLIED_GOTO 
+                  {  follow = ST31, succ = ST31,  }
+ ST32       ELSEIF (st27.EQ.0) THEN
+                  {  follow = ST34, lead = ST29, succ = ST37, ST34, pred
+              * = ST29, in_refs = st27,  }
+ ST37       GOTO S16
+                 {succ = S16, pred = ST32,  }
+ ST35       IMPLIED_GOTO 
+                  {  follow = ST31, succ = ST31,  }
+ ST34       ELSE 
+                  {  follow = ST31, lead = ST32, succ = ST38, pred = ST3
+              *2,  }
+ ST38       GOTO S14
+                 {succ = S14, pred = ST34,  }
+ ST30       IMPLIED_GOTO 
+                  {  follow = ST31, succ = ST31,  }
+ ST31       ENDIF 
+                  {  matching_if = ST29, lead = ST29, succ = S9, pred = 
+              *ST30, ST33, ST35,  }
+   S9       PRINT ([FMT, *]) j
+                 {succ = S10, pred = ST31, in_refs = j, line = 12,  }
+  S10       STOP 
+                 {succ = S22, pred = S9, line = 13,  }
+  S11    10 LABEL 10
+                 {succ = S12, pred = ST36, ST56, ST72, line = 14,  }
+  S12       j = j+3
+                 {succ = S13, pred = S11, in_refs = j, out_refs = j, lin
+              *e = 15,  }
+  S13       GOTO S16
+                 {succ = S16, pred = S12, line = 16,  }
+  S14    20 LABEL 20
+                 {succ = S15, pred = ST38, ST44, ST50, ST60, ST66, line 
+              *= 17,  }
+  S15       PRINT ([FMT, *]) 'BLAH'
+                 {succ = S16, pred = S14, line = 18,  }
+  S16    30 LABEL 30
+                 {succ = S17, pred = S13, S15, ST37, ST53, ST69, line = 
+              *19,  }
+  S17       PRINT ([FMT, *]) j
+                 {succ = S18, pred = S16, in_refs = j, line = 20,  }
+  S18       STOP 
+                 {succ = S22, pred = S17, line = 21,  }
+  S19    40 LABEL 40
+                 {succ = S20, pred = ST47, ST63, line = 22,  }
+  S20       PRINT ([FMT, *]) i
+                 {succ = S21, pred = S19, in_refs = i, line = 23,  }
+  S21       STOP 
+                 {succ = S22, pred = S20, line = 25,  }
+  S22       FLOWEXIT
+                 {pred = S10, S18, S21, line = 26,  }
+*Polaris v38.0 Switches Database:
+
+
+*     accreg_procsum    0    accreg_read    0    accreg_write    0
+*     aggregate_debug    0    assume_small    0    autoi    1
+*     autoi_st_lim    50    autoi_strat    1    availexpr    1
+*     basic_blocks    0    bb_mark    0    burst_header    0
+*     burst_page    1    comments    0    complex_len    8
+*     constprop    0    convert_gotos    1    copyprop    1
+*     dd_dvrtest    0    dd_ignr_stop    0    dd_omega    0
+*     dd_rtest    1    dda_anti    1    dda_flow    1
+*     dda_output    1    ddebug    0    ddranges    0
+*     dds_anti    1    dds_flow    1    dds_output    1
+*     ddsummary    1    ddtest    1    dead_debug    0
+*     deadcode    1    deadcode2    1    degsa    1
+*     dessa    0    double_len    8    equiv    1
+*     equiv_debug    0    gcseliminate    1    gsa    1
+*     gsa_debug    0    gsa_prt_dom    0    gsa_prt_domf    0
+*     gsa_prt_pdom    0    gsa_prt_pdomf    0    induct    1
+*     induct_debug    0    induct_lcf    0    inline    1
+*     inline_clean    0    inline_count    0    inline_debug    1
+*     inline_site    0    instr_all    0    instr_par    0
+*     instr_trip    0    instrument    0    integer_len    4
+*     kap_scanner    0    lastvalue    1    logical_len    4
+*     lower_case    1    memory_dirs    1    nolinelenwarn    0
+*     output_lang    1    output_size    1    p_avail    1
+*     p_bblocks    2    p_bbsummary    1    p_congoto    2
+*     p_constprop    0    p_ddtest    2    p_deadcode    0
+*     p_deadcode2    0    p_degsa    0    p_dessa    1
+*     p_equiv    0    p_gsa    0    p_induct    0
+*     p_inline    0    p_privatize    0    p_reduction    0
+*     p_removegoto    0    p_scan    2    p_ssa    1
+*     p_subexpr    2    p_subst_fld    0    p_subst_parm    0
+*     p_substitute    2    par_thresh    5    pass_trace    1
+*     pc_array    1    pc_call_mods    0    pc_real    0
+*     pc_unreach    1    post_range    1    postpass    1
+*     pri_cond_l    4    pri_debug    0    pri_inbound    0
+*     pri_prt_dom    0    pri_prt_domf    0    pri_prt_pdom    0
+*     pri_prt_pdomf    0    pri_reg_dbg    0    pri_whole    0
+*     print    1    print_accreg    0    print_gsa    0
+*     print_gsa2    0    priv_noarrays    0    privatize    1
+*     processors    8    procs_known    1    prom_integer    1
+*     prom_logical    1    prop_iterate    2    prop_private    0
+*     propagate    1    prt_in_clones    0    pu_start    0
+*     pu_stop    0    range_acc    1    range_block    0
+*     range_off    0    real_len    8    redbe_debug    0
+*     reduct_debug    0    reduct_gen    1    reduct_srr    0
+*     reduction    1    removegoto    1    rt_alloc    0
+*     rt_debug    2    rt_minmax    0    rtprof    0
+*     rtprof_debug    0    runtimetest    0    safe_cond    1
+*     scalar_gen    0    simp_combine    1    simp_dist    1
+*     simp_div    1    simp_fold    1    simp_ratdiv    0
+*     sp_real    0    ssa    0    strategy    3
+*     subexpr    1    subst_parm    1    substitute    1
+*     summary    1    thr_debug    0    thread_gen    0
+*     thresh_stmts    5    var_size_red    1    which_reduct    2
+*     wide_output    1    wide_space    2
+
+                             PROGRAM testme
+                             EXTERNAL f
+                             INTEGER*4 i, j
+                             REAL*8 f, st27, st39
+    5                        READ (UNIT = *, FMT = *) i, j
+    6                        IF (i.LT.10) THEN
+                              st39 = i+f(j)
+                              IF (st39.EQ.1) THEN
+                               GOTO 20
+                              ELSEIF (st39.EQ.2) THEN 
+                               GOTO 40
+                              ELSEIF (st39.EQ.3) THEN 
+                               GOTO 20
+                              ELSEIF (st39.EQ.4) THEN 
+                               GOTO 30
+                              ELSEIF (st39.EQ.5) THEN 
+                               GOTO 10
+                              ENDIF 
+    8                        ELSE 
+                              IF (j*3.EQ.1) THEN
+                               GOTO 20
+                              ELSEIF (j*3.EQ.2) THEN 
+                               GOTO 40
+                              ELSEIF (j*3.EQ.3) THEN 
+                               GOTO 20
+                              ELSEIF (j*3.EQ.4) THEN 
+                               GOTO 30
+                              ELSEIF (j*3.EQ.5) THEN 
+                               GOTO 10
+                              ENDIF 
+   10                        ENDIF 
+                             st27 = f(j)
+                             IF (st27.LT.0) THEN
+                              GOTO 10
+                             ELSEIF (st27.EQ.0) THEN 
+                              GOTO 30
+                             ELSE 
+                              GOTO 20
+                             ENDIF 
+   12                        PRINT *, j
+   13                        STOP 
+   14                     10 CONTINUE 
+   15                        j = j+3
+   16                        GOTO 30
+   17                     20 CONTINUE 
+   18                        PRINT *, 'BLAH'
+   19                     30 CONTINUE 
+   20                        PRINT *, j
+   21                        STOP 
+   22                     40 CONTINUE 
+   23                        PRINT *, i
+   25                        STOP 
+                             END

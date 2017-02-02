@@ -1,0 +1,5 @@
+The convert_gotos functions calls two helper functions:
+    convert_arithmetic_ifs: Convert arithmetic ifs to if-else branches
+    convert_computed_gotos: Convert computed gotos to if-else branches
+
+Possible side effects is handled using the get_precalc function.

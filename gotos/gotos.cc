@@ -37,7 +37,7 @@ void convert_arithmetic_ifs(ProgramUnit& pgm) {
                 pgm, 
                 aIfStmt,
                 PRECALC_ALWAYS,
-                statements.new_tag()
+                "TEMP"
             );
 
             aIfStmt.expr(precalcExpr);
@@ -83,7 +83,7 @@ void convert_computed_gotos(ProgramUnit& pgm) {
                 pgm, 
                 computedGotoStmt,
                 PRECALC_ALWAYS,
-                statements.new_tag()
+                "TEMP"
             );
 
             computedGotoStmt.expr(precalcExpr);
