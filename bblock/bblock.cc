@@ -30,6 +30,8 @@ List<BasicBlock>	  * find_basic_blocks(ProgramUnit & pgm)
 
     List<BasicBlock>* basicBlocks = new List<BasicBlock>();
 
+    BasicBlock* bb = new BasicBlock();
+
     // return NULL if pgm.pu_class() == BLOCK_DATA_PU_TYPE or UNKNOWN_PU_TYPE
 
     //  you will put in here the bulk of the work
@@ -37,6 +39,32 @@ List<BasicBlock>	  * find_basic_blocks(ProgramUnit & pgm)
     //  and between next_ref() and succ().  Try running polaris with the
     //  switch p_scan set to 2 and examining how these fields are used
     //  with the various statements.
+
+    StmtList& statements = pgm.stmts();
+    for (Iterator<Statement> iter = statements;
+        iter.valid();
+        ++iter) {
+
+        Statement& currStmt = iter.current();
+
+        if (currStmt.succ().entries() > 1) {
+            cout << "start of new bb" << endl;
+            cout << currStmt << endl;
+            cout << "-------------------------------" << endl;
+        } else if (currStmt.succ().entries() == 1) {
+            const Statement& onlySuccStmt = currStmt.succ()._element(0);
+
+            const Statement* nextStmt = currStmt.next_ref();
+
+            if (&onlySuccStmt != nextStmt) {
+                cout << "branch!" << endl;
+                cout << currStmt << endl;
+                cout << onlySuccStmt << endl;
+                cout << *nextStmt << endl;
+                cout << "-------------------------------" << endl;
+            }
+        }
+    }
 
     // somewhere inside, to create the name of the Basic Block
     {
@@ -48,8 +76,6 @@ List<BasicBlock>	  * find_basic_blocks(ProgramUnit & pgm)
         bb_name = name;
         delete name;
     }
-
-    BasicBlock* bb = new BasicBlock();
 
     basicBlocks->ins_last(bb);
 

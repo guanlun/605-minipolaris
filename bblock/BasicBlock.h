@@ -36,6 +36,12 @@ class BasicBlock : public Listable
 
     // put whatever you need to store the information and be able to access it
 
+private:
+    Statement* startStmt;
+    Statement* endStmt;
+
+    List<Statement&>* preds;
+    List<Statement&>* succs;
 };
 
 INLINE Listable *
