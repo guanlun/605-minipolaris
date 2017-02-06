@@ -28,33 +28,41 @@ List<BasicBlock>	  * find_basic_blocks(ProgramUnit & pgm)
     int bb_number; // The index of basic block
     String pgm_name; // The program unit's name
 
+    List<BasicBlock>* basicBlocks = new List<BasicBlock>();
+
     // return NULL if pgm.pu_class() == BLOCK_DATA_PU_TYPE or UNKNOWN_PU_TYPE
 
-//  you will put in here the bulk of the work
-//  be sure to understand the difference between prev_ref() and pred()
-//  and between next_ref() and succ().  Try running polaris with the
-//  switch p_scan set to 2 and examining how these fields are used
-//  with the various statements.
+    //  you will put in here the bulk of the work
+    //  be sure to understand the difference between prev_ref() and pred()
+    //  and between next_ref() and succ().  Try running polaris with the
+    //  switch p_scan set to 2 and examining how these fields are used
+    //  with the various statements.
 
-	// somewhere inside, to create the name of the Basic Block
-	{
-	    strstream o;  // notice o is inside a local scope and so it
-				// is reinitialized each time
+    // somewhere inside, to create the name of the Basic Block
+    {
+        strstream o;  // notice o is inside a local scope and so it
+        // is reinitialized each time
 
-	    o << pgm_name << "#" << bb_number++ << '\000';
-	    char *name = o.str();
-	    bb_name = name;
-	    delete name;
-	}
+        o << pgm_name << "#" << bb_number++ << '\000';
+        char *name = o.str();
+        bb_name = name;
+        delete name;
+    }
 
-	// (Hint : use the same technique to build the comment
-	// you will insert before the first statement of each block,
-	// since it requires type String.
+    BasicBlock* bb = new BasicBlock();
 
-//
-//   :-)
-//
-	
+    basicBlocks->ins_last(bb);
+
+    // (Hint : use the same technique to build the comment
+    // you will insert before the first statement of each block,
+    // since it requires type String.
+
+    //
+    //   :-)
+    //
+
+
+    return basicBlocks;
 }
 
 
@@ -67,21 +75,21 @@ void		    summarize_basic_blocks(ProgramUnit& pgm, List<BasicBlock> * bbl, ostre
 
     o << "BASIC BLOCK SUMMARY FOR ";
 
-// print PROGRAM/SUBROUTINE/FUNCTION depending upon type ...
-//    and if not the right type, unconditionally exit
- 	    p_abort("summarize_basic_blocks() : invalid PU type");
+    // TODO
+    // print PROGRAM/SUBROUTINE/FUNCTION depending upon type ...
+    //    and if not the right type, unconditionally exit
+    // p_abort("summarize_basic_blocks() : invalid PU type");
 
-// print the name of the program unit
+    // print the name of the program unit
 
     o << "=============================================\n";
 
     // change X to the number of basic blocks in pgm
-    int X;
-    o << "   " << X << " basic blocks total.\n\n";
+    o << "   " << bbl->entries() << " basic blocks total.\n\n";
 
 
-//  output every basic block 
-//
+    //  output every basic block 
+    //
 
     o << "\n";
 }

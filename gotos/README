@@ -1,0 +1,11 @@
+The convert_gotos functions calls two helper functions:
+    convert_arithmetic_ifs: Convert arithmetic ifs to if-else branches
+    convert_computed_gotos: Convert computed gotos to if-else branches
+
+The conversion functions handles each targeted statements by converting them to desired if-else branches. The branches are created first, then the goto statements inside each branch are inserted.
+
+Possible side effects is handled using the get_precalc function.
+
+To run the program, use the "sw" switches file:
+
+./mini_polaris -f sw {INPUT_FILE}
