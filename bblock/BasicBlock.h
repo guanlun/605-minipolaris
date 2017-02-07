@@ -22,6 +22,11 @@ using namespace std;
 
 class BasicBlock : public Listable
 {
+public:
+    void addStatement(Statement& statement);
+    int tag;
+
+private:    
     // be sure to define the following virtual functions yourself, since
     // they are inherited from Listable :
 
@@ -33,21 +38,21 @@ class BasicBlock : public Listable
     // print the contents of the Basic Block (used in summary)
     INLINE void print(ostream &o) const;
 
-
     // put whatever you need to store the information and be able to access it
 
-private:
-    Statement* startStmt;
-    Statement* endStmt;
-
-    List<Statement&>* preds;
-    List<Statement&>* succs;
+    RefList<Statement&> stmts;
 };
+
+void
+BasicBlock::addStatement(Statement& statement)
+{
+    this->stmts.ins_last(statement);
+}
 
 INLINE Listable *
 BasicBlock::listable_clone() const
 {
-    
+    // TODO
 }
 
 // one example of a member function :
