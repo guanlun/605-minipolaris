@@ -20,7 +20,28 @@
 
 using namespace std;
 
-class BasicBlockWork;
+class BasicBlock;
+
+class BasicBlockWork : public WorkSpace
+{
+public:
+    BasicBlockWork(BasicBlockWork & other) : _basicBlock(other._basicBlock), WorkSpace(other) { }
+
+    BasicBlockWork(int tag, BasicBlock * BasicBlock) : _basicBlock(BasicBlock), WorkSpace(tag)  { }
+
+    INLINE BasicBlock * get_basic_block() const { return _basicBlock; }
+
+    INLINE Listable *listable_clone() const { return new BasicBlockWork((BasicBlockWork &) *this); }
+    // Needed for Listable class.
+
+    INLINE void print(ostream &o) const { o << "BasicBlockWork : [ " << " ]"; }
+    // Needed for Listable class.
+
+    INLINE int structures_OK() const { return 1; };
+
+private:
+    BasicBlock * _basicBlock;
+};
 
 class BasicBlock : public Listable
 {
@@ -58,6 +79,13 @@ BasicBlock::BasicBlock(const String& name)
     this->name = name;
 }
 
+
+INLINE Listable *
+BasicBlock::listable_clone() const
+{
+    // TODO
+}
+
 void
 BasicBlock::build_pred_succ_relation()
 {
@@ -74,14 +102,8 @@ BasicBlock::build_pred_succ_relation()
         BasicBlockWork* bbWork =
             (BasicBlockWork *) predStatement.work_stack().top_ref(0);
 
-        // BasicBlock* pred = bbWork->get_basic_block();
+        BasicBlock* pred = bbWork->get_basic_block();
     }
-}
-
-INLINE Listable *
-BasicBlock::listable_clone() const
-{
-    // TODO
 }
 
 // one example of a member function :
@@ -135,48 +157,5 @@ BasicBlock::print(ostream &o) const
 
 // you will need many more functions here (or you can put some in BasicBlock.cc
 // for example, making sure to mention it in the Makefile in CPPSRCS...)
-
-
-class BasicBlockWork : public WorkSpace
-{
-public:
-    BasicBlockWork(BasicBlockWork & other) : _basicBlock(other._basicBlock), WorkSpace(other) { }
-
-    BasicBlockWork(int tag, BasicBlock * BasicBlock) : _basicBlock(BasicBlock), WorkSpace(tag)  { }
-
-    INLINE BasicBlock * get_basic_block() const { return _basicBlock; }
-
-    INLINE Listable *listable_clone() const;
-    // Needed for Listable class.
-
-    INLINE void print(ostream &o) const;
-    // Needed for Listable class.
-
-    INLINE int structures_OK() const;
-
-private:
-    BasicBlock * _basicBlock;
-};
-
-INLINE
-Listable *
-BasicBlockWork::listable_clone() const
-{
-    return new BasicBlockWork((BasicBlockWork &) *this);
-}
-
-INLINE
-int
-BasicBlockWork::structures_OK() const
-{
-    return 1;
-}
-
-inline
-void
-BasicBlockWork::print(ostream &o) const
-{
-    o << "BasicBlockWork : [ " << " ]";
-}
 
 #endif
