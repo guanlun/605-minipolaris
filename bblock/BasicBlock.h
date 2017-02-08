@@ -20,13 +20,13 @@
 
 using namespace std;
 
+class BasicBlockWork;
+
 class BasicBlock : public Listable
 {
 public:
-    void addStatement(Statement& statement);
-    int tag;
+    BasicBlock(const String& name);
 
-private:    
     // be sure to define the following virtual functions yourself, since
     // they are inherited from Listable :
 
@@ -38,15 +38,44 @@ private:
     // print the contents of the Basic Block (used in summary)
     INLINE void print(ostream &o) const;
 
+    INLINE void add_statement(Statement& statement) { this->stmts.ins_last(statement); }
+
+    void build_pred_succ_relation();
+
+    string name;
+
+private:
     // put whatever you need to store the information and be able to access it
 
     RefList<Statement&> stmts;
+
+    RefList<BasicBlock&> predecessors;
+    RefList<BasicBlock&> successors;
 };
 
-void
-BasicBlock::addStatement(Statement& statement)
+BasicBlock::BasicBlock(const String& name)
 {
-    this->stmts.ins_last(statement);
+    this->name = name;
+}
+
+void
+BasicBlock::build_pred_succ_relation()
+{
+    int stmtCount = this->stmts.entries();
+
+    Statement* firstStmt = &(this->stmts[0]);
+    Statement* lastStmt = &(this->stmts[stmtCount - 1]);
+
+    for (Iterator<Statement> iter = firstStmt->pred();
+        iter.valid();
+        ++iter) {
+        Statement& predStatement = iter.current();
+
+        BasicBlockWork* bbWork =
+            (BasicBlockWork *) predStatement.work_stack().top_ref(0);
+
+        // BasicBlock* pred = bbWork->get_basic_block();
+    }
 }
 
 INLINE Listable *
@@ -59,25 +88,27 @@ BasicBlock::listable_clone() const
 INLINE void
 BasicBlock::print(ostream &o) const
 {
-    // change X1 to the basic block name
-    String X1;
-    o << "    Basic Block " << X1 << " :\n";
+    o << "    Basic Block " << this->name << " :\n";
+
+    int stmtCount = this->stmts.entries();
     // change X2 to the number of statements in block
-    int X2;
-    o << "      " << X2 << " statements.\n";
+    o << "      " << stmtCount << " statements.\n";
     o << "      starts : ";
 
-    // change X3 to a variable containing the first statment in the block
-    Statement* X3;
+    Statement* firstStmt = &(this->stmts[0]);
+    Statement* lastStmt = &(this->stmts[stmtCount - 1]);
+
     int indent = 0;
-    X3->write(o, indent);
-    // change X4 to number of statements
-    int X4;
-    if (X4 > 1)
+    firstStmt->write(o, indent);
+
+    if (stmtCount > 1)
     {
         o << "      ends   : ";
         // print last statement
+
+        lastStmt->write(o, indent);
     }
+
     // change X5 to number of predecessors
     int X5;
     o << "\n      " << X5 << " predecessors : \n";
@@ -106,5 +137,46 @@ BasicBlock::print(ostream &o) const
 // for example, making sure to mention it in the Makefile in CPPSRCS...)
 
 
+class BasicBlockWork : public WorkSpace
+{
+public:
+    BasicBlockWork(BasicBlockWork & other) : _basicBlock(other._basicBlock), WorkSpace(other) { }
+
+    BasicBlockWork(int tag, BasicBlock * BasicBlock) : _basicBlock(BasicBlock), WorkSpace(tag)  { }
+
+    INLINE BasicBlock * get_basic_block() const { return _basicBlock; }
+
+    INLINE Listable *listable_clone() const;
+    // Needed for Listable class.
+
+    INLINE void print(ostream &o) const;
+    // Needed for Listable class.
+
+    INLINE int structures_OK() const;
+
+private:
+    BasicBlock * _basicBlock;
+};
+
+INLINE
+Listable *
+BasicBlockWork::listable_clone() const
+{
+    return new BasicBlockWork((BasicBlockWork &) *this);
+}
+
+INLINE
+int
+BasicBlockWork::structures_OK() const
+{
+    return 1;
+}
+
+inline
+void
+BasicBlockWork::print(ostream &o) const
+{
+    o << "BasicBlockWork : [ " << " ]";
+}
 
 #endif

@@ -65,81 +65,42 @@ List<BasicBlock>	  * find_basic_blocks(ProgramUnit & pgm)
 
         Statement& currStmt = iter.current();
 
-        if (is_begin_of_bb(currStmt)) {
+        if (is_begin_of_bb(currStmt) || (bb == NULL)) {
             if (bb != NULL) {
                 basicBlocks->ins_last(bb);
-                cout << "end: " << bb << *(currStmt.prev_ref()) << endl;
+
+                bb = NULL;
             }
 
-            bb = new BasicBlock();
-            cout << "begin: " << bb << currStmt << endl;
-        } else if (bb == NULL) {
-            cout << "begin: " << bb << currStmt << endl;
-            bb = new BasicBlock();
+            strstream o;
+
+            o << pgm_name << "#" << bb_number++ << '\000';
+            char *name = o.str();
+            bb_name = name;
+            delete name;
+
+            bb = new BasicBlock(bb_name);
         }
 
-        bb->addStatement(currStmt);
+        bb->add_statement(currStmt);
+        currStmt.work_stack().push(new BasicBlockWork(0, bb));
 
         if (is_end_of_bb(currStmt)) {
-            cout << "end: " << bb << currStmt << endl;
             basicBlocks->ins_last(bb);
 
             bb = NULL;
         }
+    }
 
-        /*
-        if (currStmt.pred().entries() != 1) {
-            Statement* prevStmt = currStmt.prev_ref();
-            if (prevStmt != NULL) {
-                cout << "end of current bb" << endl;
-                cout << *(currStmt.prev_ref()) << endl;
-                cout << "-------------------------------" << endl;
-            }
+    for (Iterator<BasicBlock> iter = basicBlocks;
+        iter.valid();
+        ++iter) {
+        BasicBlock& currBlk = iter.current();
 
-            cout << "begining of new bb" << endl;
-            cout << currStmt << endl;
-            cout << "-------------------------------" << endl;
-        // } else {
-        //     const Statement& onlyPredStmt = currStmt.pred()._element(0);
-        //     const Statement* prevStmt = currStmt.prev_ref();
-
-        //     if (&onlyPredStmt != prevStmt) {
-        //         cout << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << endl;
-        //     }
-        }
-
-        if (currStmt.succ().entries() != 1) {
-            cout << "end of current bb - more than one way" << endl;
-            cout << currStmt << endl;
-            cout << "-------------------------------" << endl;
-
-        } else {
-            const Statement& onlySuccStmt = currStmt.succ()._element(0);
-
-            const Statement* nextStmt = currStmt.next_ref();
-
-            if (&onlySuccStmt != nextStmt) {
-                cout << "end of current bb - diff" << endl;
-                cout << currStmt << endl;
-                cout << "-------------------------------" << endl;
-            }
-        }
-        */
-
+        currBlk.build_pred_succ_relation();
     }
 
     cout << "----------------------------------------------------------" << endl;
-
-    // somewhere inside, to create the name of the Basic Block
-    {
-        strstream o;  // notice o is inside a local scope and so it
-        // is reinitialized each time
-
-        o << pgm_name << "#" << bb_number++ << '\000';
-        char *name = o.str();
-        bb_name = name;
-        delete name;
-    }
 
     // (Hint : use the same technique to build the comment
     // you will insert before the first statement of each block,
@@ -174,7 +135,6 @@ void		    summarize_basic_blocks(ProgramUnit& pgm, List<BasicBlock> * bbl, ostre
     // change X to the number of basic blocks in pgm
     o << "   " << bbl->entries() << " basic blocks total.\n\n";
 
-
     //  output every basic block 
     //
 
@@ -183,7 +143,7 @@ void		    summarize_basic_blocks(ProgramUnit& pgm, List<BasicBlock> * bbl, ostre
         ++iter) {
         BasicBlock& bb = iter.current();
 
-        cout << bb.tag << endl;
+        bb.print(cout);
     }
 
     o << "\n";

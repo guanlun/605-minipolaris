@@ -23,7 +23,7 @@ nolinelenwarn 0 =1: turn off warnings of lines beyond col 72
 
 # Project 1a
 
-convert_gotos 1	Convert arithmetic ifs and computed gotos to simple gotos
+convert_gotos 0	Convert arithmetic ifs and computed gotos to simple gotos
 p_congoto     2	print after convert gotos pass (1 == Fortran form, 2 == all fields)
 
 # Project 1b
