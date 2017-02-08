@@ -4,3 +4,5 @@
 *~
 *.swp
 mini_polaris
+input/
+output/

@@ -1,6 +1,6 @@
 // 
 // gotos.cc : convert gotos pass
-// 
+//
 
 #include "gotos.h"
 #include "StmtList.h"

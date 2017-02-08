@@ -41,15 +41,19 @@ bool is_begin_of_bb(const Statement& currStmt)
 
 List<BasicBlock>	  * find_basic_blocks(ProgramUnit & pgm)
 {
+    PU_TYPE pgmClass = pgm.pu_class();
+
+    if ((pgmClass == BLOCK_DATA_PU_TYPE) || (pgmClass == UNDEFINED_PU_TYPE)) {
+        return NULL;
+    }
+
     String bb_name;
-    int bb_number; // The index of basic block
-    String pgm_name; // The program unit's name
+    int bb_number = 0; // The index of basic block
+    String pgm_name = pgm.routine_name_ref(); // The program unit's name
 
     List<BasicBlock>* basicBlocks = new List<BasicBlock>();
 
     BasicBlock* bb = NULL;
-
-    // return NULL if pgm.pu_class() == BLOCK_DATA_PU_TYPE or UNKNOWN_PU_TYPE
 
     //  you will put in here the bulk of the work
     //  be sure to understand the difference between prev_ref() and pred()
@@ -58,7 +62,7 @@ List<BasicBlock>	  * find_basic_blocks(ProgramUnit & pgm)
     //  with the various statements.
 
     StmtList& statements = pgm.stmts();
-    cout << "----------------------------------------------------------" << endl;
+
     for (Iterator<Statement> iter = statements;
         iter.valid();
         ++iter) {
@@ -97,10 +101,9 @@ List<BasicBlock>	  * find_basic_blocks(ProgramUnit & pgm)
         ++iter) {
         BasicBlock& currBlk = iter.current();
 
+        currBlk.insert_bb_comment();
         currBlk.build_pred_succ_relation();
     }
-
-    cout << "----------------------------------------------------------" << endl;
 
     // (Hint : use the same technique to build the comment
     // you will insert before the first statement of each block,
@@ -130,6 +133,8 @@ void		    summarize_basic_blocks(ProgramUnit& pgm, List<BasicBlock> * bbl, ostre
 
     // print the name of the program unit
 
+    o << pgm.routine_name_ref() << "\n";
+
     o << "=============================================\n";
 
     // change X to the number of basic blocks in pgm
@@ -144,7 +149,7 @@ void		    summarize_basic_blocks(ProgramUnit& pgm, List<BasicBlock> * bbl, ostre
         BasicBlock& bb = iter.current();
 
         bb.print(cout);
-    }
 
-    o << "\n";
+        o << "\n";
+    }
 }
