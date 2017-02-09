@@ -117,7 +117,7 @@ BasicBlock::build_pred_succ_relation()
         Statement& predStatement = iter.current();
 
         BasicBlockWork* bbWork =
-            (BasicBlockWork *) predStatement.work_stack().top_ref(0);
+            (BasicBlockWork *) predStatement.work_stack().top_ref(1);
 
         BasicBlock* pred = bbWork->get_basic_block();
 
@@ -130,7 +130,7 @@ BasicBlock::build_pred_succ_relation()
         Statement& succStatement = iter.current();
 
         BasicBlockWork* bbWork =
-            (BasicBlockWork *) succStatement.work_stack().top_ref(0);
+            (BasicBlockWork *) succStatement.work_stack().top_ref(1);
 
         BasicBlock* succ = bbWork->get_basic_block();
 

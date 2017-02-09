@@ -87,7 +87,7 @@ List<BasicBlock>	  * find_basic_blocks(ProgramUnit & pgm)
         }
 
         bb->add_statement(currStmt);
-        currStmt.work_stack().push(new BasicBlockWork(0, bb));
+        currStmt.work_stack().push(new BasicBlockWork(1, bb));
 
         if (is_end_of_bb(currStmt)) {
             basicBlocks->ins_last(bb);
@@ -126,13 +126,29 @@ void		    summarize_basic_blocks(ProgramUnit& pgm, List<BasicBlock> * bbl, ostre
 
     o << "BASIC BLOCK SUMMARY FOR ";
 
-    // TODO
     // print PROGRAM/SUBROUTINE/FUNCTION depending upon type ...
     //    and if not the right type, unconditionally exit
     // p_abort("summarize_basic_blocks() : invalid PU type");
+    char* programType;
+
+    switch (pgm.pu_class()) {
+        case PROGRAM_PU_TYPE:
+            programType = "PROGRAM";
+            break;
+        case SUBROUTINE_PU_TYPE:
+            programType = "SUBROUTINE";
+            break;
+        case FUNCTION_PU_TYPE:
+            programType = "FUNCTION";
+            break;
+        default:
+            p_abort("summarize_basic_blocks() : invalid PU type");
+            break;
+    }
+
+    o << programType << ": ";
 
     // print the name of the program unit
-
     o << pgm.routine_name_ref() << "\n";
 
     o << "=============================================\n";

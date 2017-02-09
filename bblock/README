@@ -1,0 +1,11 @@
+The basic blocks are recognized based on the structural information of statements (predecessors, successors, previous statement and next statement).
+
+If a statement has zero or more than one predecessors, it is the beginning of a new basic block.
+
+If a statement has zero or more than one successors, or if its only successor is not the following statement (indicating a GOTO), it is then the ending of the current basic block.
+
+The predecessors of each basic block are obtained by following the reference of the predecessor statements of its first statement. After finding what the predecessor statements are, query the work_stack of the statement to find the BasicBlockWork reference that has been added to the work_stack beforehand.
+
+The successors of each basic block are obtained in a similar fashion.
+
+A helper class BasicBlockWork is created as a container of a BasicBlock, and is added to a statement's work_stack to keep a reference from statements to basic blocks.
