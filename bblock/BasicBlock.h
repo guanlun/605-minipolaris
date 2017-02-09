@@ -32,7 +32,7 @@ public:
     INLINE Listable *listable_clone() const { return new BasicBlockWork((BasicBlockWork &) *this); }
     // Needed for Listable class.
 
-    INLINE void print(ostream &o) const { o << "BasicBlockWork : [ " << " ]"; }
+    INLINE void print(ostream &o) const { o << "BasicBlockWork : [ " << this->_basicBlock << " ]"; }
     // Needed for Listable class.
 
     INLINE int structures_OK() const { return 1; };
@@ -98,7 +98,7 @@ BasicBlock::insert_bb_comment()
 	Statement* firstStmt = &(this->stmts[0]);
 
 	strstream o;
-	o << "C        - - - - - - - - - BASIC BLOCK : " << this->name << '\000';
+	o << "c     ----------- BASIC BLOCK: " << this->name << '\000';
 
 	firstStmt->pre_directives().ins_last(new StringElem(o.str()));
 }
