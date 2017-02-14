@@ -6,6 +6,7 @@
 #define _CONSTANT_H
 
 #include "ProgramUnit.h"
+#include "ConstPropWS.h"
 
 void propagate_constants(ProgramUnit & pgm);
 

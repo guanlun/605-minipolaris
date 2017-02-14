@@ -42,8 +42,8 @@ p_dessa      1  print after deSSA pass (0=dont, 1=FORTRAN,2=detailed)
 
 # Project 3
 
-constprop          0  performs constant propagation, live variable analysis, deadcode elimination (0=dont,1=do)
-p_constprop        0  print after constant propagation pass (0=dont, 1=do)
+constprop          1  performs constant propagation, live variable analysis, deadcode elimination (0=dont,1=do)
+p_constprop        2  print after constant propagation pass (0=dont, 1=do)
 
 
 
