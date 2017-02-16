@@ -13,6 +13,20 @@
 
 const int PASS_TAG = 2;
 
+void stmt_set_intersection(RefSet<Statement>& base, RefSet<Statement>& other) {
+	if (base.empty()) {
+		base = other;
+	}
+
+	for (Iterator<Statement> iter = base; iter.valid(); ++iter) {
+		Statement& stmt = iter.current();
+
+		if (!other.member(stmt)) {
+			base.del(stmt);
+		}
+	}
+}
+
 void propagate_constants(ProgramUnit & pgm) {
 	StmtList& stmts = pgm.stmts();
 
@@ -26,8 +40,6 @@ void propagate_constants(ProgramUnit & pgm) {
 
 	for (Iterator<Statement> iter = stmts; iter.valid(); ++iter) {
 		Statement& stmt = iter.current();
-
-		// cout << stmt << endl;
 
 		for (Iterator<Expression> exprIter = stmt.iterate_expressions();
 			exprIter.valid();
@@ -52,22 +64,59 @@ void propagate_constants(ProgramUnit & pgm) {
 	}
 
 	for (Iterator<Statement> iter = stmts; iter.valid(); ++iter) {
+		cout << "---------------------- begin of one stmt ------------------------" << endl;
+
 		Statement& stmt = iter.current();
 
-		if (stmt.stmt_class() == ASSIGNMENT_STMT) {
-			RefSet<Statement> predecessors = stmt.pred();
-			cout << stmt.lhs().symbol() << endl;
+		cout << stmt << endl;
 
-			for (Iterator<Statement> predStmtIter = predecessors; predStmtIter.valid(); ++predStmtIter) {
-				Statement& predStmt = predStmtIter.current();
+		ConstPropWS* constPropWS = (ConstPropWS*)stmt.work_stack().top_ref(PASS_TAG);
 
-				ConstPropWS* predConstPropWS = (ConstPropWS* )predStmt.work_stack().top_ref(PASS_TAG);
+		RefSet<Statement> predecessors = stmt.pred();
 
-				cout << predConstPropWS << endl;
-			}
+		RefSet<Statement> inSet;
+		RefSet<Statement> genSet;
+		RefSet<Statement> killSet;
 
-			cout << "----------------------------------------------" << endl;
+		RefSet<Statement> resultSet;
+
+		// Iterate through all predecessors
+		for	(Iterator<Statement> predStmtIter = predecessors; predStmtIter.valid(); ++predStmtIter) {
+			Statement& predStmt = predStmtIter.current();
+
+			ConstPropWS* predConstPropWS = (ConstPropWS*)predStmt.work_stack().top_ref(PASS_TAG);
+
+			stmt_set_intersection(inSet, predConstPropWS->outSet);
 		}
+
+		resultSet += inSet;
+
+		cout << "inset: " << inSet << endl;
+
+		if (stmt.stmt_class() == ASSIGNMENT_STMT) {
+//			constPropWS->add_gen_stmt(stmt);
+			genSet.ins(stmt);
+
+			Symbol& assignedSymbol = stmt.lhs().symbol();
+
+			cout << assignedSymbol << endl;
+
+			for (Iterator<Statement> defIter = resultSet; defIter.valid(); ++defIter) {
+				Statement& prevDef = defIter.current();
+
+				if (&prevDef.lhs().symbol() == &assignedSymbol) {
+//					cout << "ASSIGNMENT TO SYMBOL!!!!" << endl;
+
+					resultSet.del(prevDef);
+				}
+			}
+		}
+
+		resultSet += genSet;
+
+		constPropWS->outSet = resultSet;
+
+		cout << "---------------------- end of one stmt ------------------------" << endl;
 	}
 
 	// Ref: compute const value: int_const_val in https://parasol.tamu.edu/courses/minipolaris/docs/polaris/_prop_const_w_s_8cc-source.html
