@@ -5,7 +5,7 @@
 #include "constant.h"
 #include "StmtList.h"
 #include "Statement/Statement.h"
-#include "Statement/AssignmentStmt.h"
+#include "Statement/IfStmt.h"
 #include "Expression/IntConstExpr.h"
 #include "Expression/expr_funcs.h"
 #include "Symbol/SymbolicConstantSymbol.h"
@@ -28,18 +28,22 @@ void stmt_set_intersection(RefSet<Statement>& base, RefSet<Statement>& other) {
 }
 
 Expression* replace_expression(Expression* expr, Expression* oldExpr, Expression* newExpr) {
+	cout << "replacing" << endl;
 	if (expr->op() == ID_OP) {
 		if (&expr->symbol() == &oldExpr->symbol()) {
 			return newExpr->clone();
 		}
 	} else {
 		for (Mutator<Expression> exprMut = expr->arg_list(); exprMut.valid(); ++exprMut) {
+			cout << "current: " << exprMut.current() << endl;
 			exprMut.assign() = replace_expression(exprMut.pull(), oldExpr, newExpr);
 		}
 	}
 
 	return expr;
 }
+
+//Expression* replace_constant_symbol(Expression* expr)
 
 void propagate_constants(ProgramUnit & pgm) {
 	StmtList& stmts = pgm.stmts();
@@ -68,7 +72,7 @@ void propagate_constants(ProgramUnit & pgm) {
 				 	exprIter.assign() = replace_expression(&expr, &expr, symbol.expr_ref()->clone());
 				}
 			} else {
-
+//				exprIter.assign() = replace_expression(&expr, &expr, symbol.expr_ref()->clone());
 			}
 		}
 	}
@@ -109,8 +113,6 @@ void propagate_constants(ProgramUnit & pgm) {
 
 			Symbol& assignedSymbol = stmt.lhs().symbol();
 
-			cout << assignedSymbol << endl;
-
 			for (Iterator<Statement> defIter = resultSet; defIter.valid(); ++defIter) {
 				Statement& prevDef = defIter.current();
 
@@ -131,7 +133,7 @@ void propagate_constants(ProgramUnit & pgm) {
 		cout << "---------------------- begin of one stmt ------------------------" << endl;
 
 		Statement& stmt = iter.current();
-		cout << stmt << endl;
+		cout << "Now at: " << stmt << endl;
 
 		ConstPropWS* constPropWS = (ConstPropWS*)stmt.work_stack().top_ref(PASS_TAG);
 		RefSet<Statement> defs = constPropWS->inSet;
@@ -141,35 +143,58 @@ void propagate_constants(ProgramUnit & pgm) {
 			++exprIter) {
 			Expression& expr = exprIter.current();
 
-			if (expr.op() == ID_OP) {
-				cout << expr << endl;
-				cout << defs << endl;
+			for (Iterator<Statement> defIter = defs; defIter.valid(); ++defIter) {
+				Statement& def = defIter.current();
 
-				for (Iterator<Statement> defIter = defs; defIter.valid(); ++defIter) {
-					Statement& def = defIter.current();
+				cout << "def: " << def << endl;
+				cout << "lhs: " << def.lhs() << endl;
+				cout << "rhs: " << def.rhs() << endl;
 
-					cout << "previously defined: " << def << endl;
-
-					cout << def.lhs() << " and " << def.rhs() << endl;
-					exprIter.assign() = replace_expression(&expr, &def.lhs(), &def.rhs());
-//					exprIter.assign() = def.rhs().clone();
+				if (expr.op() == DELETED_EXPRESSION_OP) {
+					break;
 				}
-			} else {
-				cout << "not id op!!!" << endl;
-//				cout << expr.arg_list() << endl;
 
-				for (Iterator<Statement> defIter = defs; defIter.valid(); ++defIter) {
-					Statement& def = defIter.current();
+				exprIter.assign() = replace_expression(&expr, &def.lhs(), def.rhs().clone());
 
-					// if (&def.lhs().symbol() == )
-
-//					replace_expression(&expr, )
-				}
+//				if (expr.op() == ID_OP) {
+//					cout << "is ID" << endl;
+//					if (&expr.symbol() == &def.lhs().symbol()) {
+//						cout << "replacing ID" << endl;
+//						exprIter.assign() = replace_expression(&expr, &def.lhs(), &def.rhs());
+//					}
+//				} else {
+//					cout << "not ID: " << expr.op() << endl;
+//					exprIter.assign() = replace_expression(&expr, &def.lhs(), &def.rhs());
+//				}
 			}
 		}
 
 		cout << "---------------------- end of one stmt ------------------------" << endl;
 	}
+
+	for (Iterator<Statement> iter = stmts; iter.valid(); ++iter) {
+		Statement& stmt = iter.current();
+
+		for (Mutator<Expression> exprIter = stmt.iterate_in_exprs_guarded();
+			exprIter.valid();
+			++exprIter) {
+			Expression& expr = exprIter.current();
+
+			Expression* simplifiedExpr = simplify(expr.clone());
+
+			cout << expr << " is simplified to " << *simplifiedExpr << endl;
+
+			switch (simplifiedExpr->op()) {
+			case LOGICAL_CONSTANT_OP:
+				exprIter.assign() = simplifiedExpr->clone();
+				break;
+			case INTEGER_CONSTANT_OP:
+				exprIter.assign() = simplifiedExpr->clone();
+				break;
+			}
+		}
+	}
+
 
 	// Ref: compute const value: int_const_val in https://parasol.tamu.edu/courses/minipolaris/docs/polaris/_prop_const_w_s_8cc-source.html
 };
