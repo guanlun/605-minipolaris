@@ -15,6 +15,7 @@ public:
 
 	INLINE int structures_OK() const { return 1; };
 
+	RefSet<Statement> inSet;
 	RefSet<Statement> outSet;
 	RefSet<Statement> genSet;
 private:

@@ -27,6 +27,20 @@ void stmt_set_intersection(RefSet<Statement>& base, RefSet<Statement>& other) {
 	}
 }
 
+Expression* replace_expression(Expression* expr, Expression* oldExpr, Expression* newExpr) {
+	if (expr->op() == ID_OP) {
+		if (&expr->symbol() == &oldExpr->symbol()) {
+			return newExpr->clone();
+		}
+	} else {
+		for (Mutator<Expression> exprMut = expr->arg_list(); exprMut.valid(); ++exprMut) {
+			exprMut.assign() = replace_expression(exprMut.pull(), oldExpr, newExpr);
+		}
+	}
+
+	return expr;
+}
+
 void propagate_constants(ProgramUnit & pgm) {
 	StmtList& stmts = pgm.stmts();
 
@@ -41,33 +55,22 @@ void propagate_constants(ProgramUnit & pgm) {
 	for (Iterator<Statement> iter = stmts; iter.valid(); ++iter) {
 		Statement& stmt = iter.current();
 
-		for (Mutator<Expression> exprIter = stmt.iterate_expressions();
+		for (Mutator<Expression> exprIter = stmt.iterate_in_exprs_guarded();
 			exprIter.valid();
 			++exprIter) {
 			Expression& expr = exprIter.current();
-
-			cout << expr << "     " << expr.arg_list() << endl;
 
 			if (expr.op() == ID_OP) {
 				const Symbol& symbol = expr.symbol();
 
 				if (symbol.sym_class() == SYMBOLIC_CONSTANT_CLASS) {
-					cout << "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" << endl;
-					cout << *(symbol.expr_ref()) << endl;
-
-					exprIter.assign() = symbol.expr_ref()->clone();
-
-//					exprIter.assign() = symbol.expr_ref();
-
-					// const Expression* constExpr = symbol.expr_ref();
-
-//					cout << stmt.rhs() << "                   " << symbol << endl;
-//					substitute_var(&stmt.rhs(), symbol, *constant(1));
+//					exprIter.assign() = symbol.expr_ref()->clone();
+				 	exprIter.assign() = replace_expression(&expr, &expr, symbol.expr_ref()->clone());
 				}
+			} else {
+
 			}
 		}
-
-
 	}
 
 	for (Iterator<Statement> iter = stmts; iter.valid(); ++iter) {
@@ -76,11 +79,7 @@ void propagate_constants(ProgramUnit & pgm) {
 	}
 
 	for (Iterator<Statement> iter = stmts; iter.valid(); ++iter) {
-		cout << "---------------------- begin of one stmt ------------------------" << endl;
-
 		Statement& stmt = iter.current();
-
-		cout << stmt << endl;
 
 		ConstPropWS* constPropWS = (ConstPropWS*)stmt.work_stack().top_ref(PASS_TAG);
 
@@ -100,12 +99,12 @@ void propagate_constants(ProgramUnit & pgm) {
 			stmt_set_intersection(inSet, predConstPropWS->outSet);
 		}
 
+		constPropWS->inSet = inSet;
 		resultSet += inSet;
 
 		cout << "inset: " << inSet << endl;
 
 		if (stmt.stmt_class() == ASSIGNMENT_STMT) {
-//			constPropWS->add_gen_stmt(stmt);
 			genSet.ins(stmt);
 
 			Symbol& assignedSymbol = stmt.lhs().symbol();
@@ -126,16 +125,50 @@ void propagate_constants(ProgramUnit & pgm) {
 		resultSet += genSet;
 
 		constPropWS->outSet = resultSet;
-
-		cout << "---------------------- end of one stmt ------------------------" << endl;
 	}
 
 	for (Iterator<Statement> iter = stmts; iter.valid(); ++iter) {
+		cout << "---------------------- begin of one stmt ------------------------" << endl;
+
 		Statement& stmt = iter.current();
+		cout << stmt << endl;
 
 		ConstPropWS* constPropWS = (ConstPropWS*)stmt.work_stack().top_ref(PASS_TAG);
+		RefSet<Statement> defs = constPropWS->inSet;
 
+		for (Mutator<Expression> exprIter = stmt.iterate_in_exprs_guarded();
+			exprIter.valid();
+			++exprIter) {
+			Expression& expr = exprIter.current();
 
+			if (expr.op() == ID_OP) {
+				cout << expr << endl;
+				cout << defs << endl;
+
+				for (Iterator<Statement> defIter = defs; defIter.valid(); ++defIter) {
+					Statement& def = defIter.current();
+
+					cout << "previously defined: " << def << endl;
+
+					cout << def.lhs() << " and " << def.rhs() << endl;
+					exprIter.assign() = replace_expression(&expr, &def.lhs(), &def.rhs());
+//					exprIter.assign() = def.rhs().clone();
+				}
+			} else {
+				cout << "not id op!!!" << endl;
+//				cout << expr.arg_list() << endl;
+
+				for (Iterator<Statement> defIter = defs; defIter.valid(); ++defIter) {
+					Statement& def = defIter.current();
+
+					// if (&def.lhs().symbol() == )
+
+//					replace_expression(&expr, )
+				}
+			}
+		}
+
+		cout << "---------------------- end of one stmt ------------------------" << endl;
 	}
 
 	// Ref: compute const value: int_const_val in https://parasol.tamu.edu/courses/minipolaris/docs/polaris/_prop_const_w_s_8cc-source.html
