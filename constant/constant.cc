@@ -9,6 +9,7 @@
 #include "Expression/IntConstExpr.h"
 #include "Expression/expr_funcs.h"
 #include "Symbol/SymbolicConstantSymbol.h"
+#include "Collection/RefMap.h"
 #include "DictionaryIter.h"
 
 const int PASS_TAG = 2;
@@ -44,8 +45,20 @@ Expression* replace_expression(Expression* expr, Expression* oldExpr, Expression
 }
 
 void replace_const_param_symbols(StmtList& stmts) {
+	cout << "****************************************************************" << endl;
+	cout << "****************************************************************" << endl;
+	cout << "****************************************************************" << endl;
+	cout << "Replacing const param symbols" << endl;
+	cout << "****************************************************************" << endl;
+	cout << "****************************************************************" << endl;
+	cout << "****************************************************************" << endl;
+	cout << endl;
+	cout << "----------------------------------------------------------------" << endl;
+
 	for (Iterator<Statement> iter = stmts; iter.valid(); ++iter) {
 		Statement& stmt = iter.current();
+
+		cout << "Statement: " << endl << stmt << endl << "-----------------------" << endl;;
 
 		for (Mutator<Expression> exprIter = stmt.iterate_in_exprs_guarded();
 			exprIter.valid();
@@ -128,11 +141,19 @@ void detect_in_out_sets(StmtList& stmts) {
 }
 
 void replace_inset_symbols(StmtList& stmts) {
-	for (Iterator<Statement> iter = stmts; iter.valid(); ++iter) {
-		cout << "---------------------- begin of one stmt ------------------------" << endl;
+	cout << "****************************************************************" << endl;
+	cout << "****************************************************************" << endl;
+	cout << "****************************************************************" << endl;
+	cout << "Replacing inset symbols" << endl;
+	cout << "****************************************************************" << endl;
+	cout << "****************************************************************" << endl;
+	cout << "****************************************************************" << endl;
+	cout << endl;
+	cout << "----------------------------------------------------------------" << endl;
 
+	for (Iterator<Statement> iter = stmts; iter.valid(); ++iter) {
 		Statement& stmt = iter.current();
-		cout << "Now at: " << stmt << endl;
+		cout << "Statement: " << endl << stmt << endl << "-----------------------" << endl;;
 
 		ConstPropWS* constPropWS = (ConstPropWS*)stmt.work_stack().top_ref(PASS_TAG);
 		RefSet<Statement> defs = constPropWS->inSet;
@@ -167,14 +188,24 @@ void replace_inset_symbols(StmtList& stmts) {
 //				}
 			}
 		}
-
-		cout << "---------------------- end of one stmt ------------------------" << endl;
 	}
 }
 
 void simplify_const_expressions(StmtList& stmts) {
+	cout << "****************************************************************" << endl;
+	cout << "****************************************************************" << endl;
+	cout << "****************************************************************" << endl;
+	cout << "Simplifying const expressions" << endl;
+	cout << "****************************************************************" << endl;
+	cout << "****************************************************************" << endl;
+	cout << "****************************************************************" << endl;
+	cout << endl;
+	cout << "----------------------------------------------------------------" << endl;
+
 	for (Iterator<Statement> iter = stmts; iter.valid(); ++iter) {
 		Statement& stmt = iter.current();
+
+		cout << "Statement: " << endl << stmt << endl << "-----------------------" << endl;;
 
 		for (Mutator<Expression> exprIter = stmt.iterate_in_exprs_guarded();
 			exprIter.valid();
@@ -198,13 +229,21 @@ void simplify_const_expressions(StmtList& stmts) {
 }
 
 void remove_dead_branches(StmtList& stmts, bool& hasChange) {
+	cout << "****************************************************************" << endl;
+	cout << "****************************************************************" << endl;
+	cout << "****************************************************************" << endl;
+	cout << "Removing dead branches" << endl;
+	cout << "****************************************************************" << endl;
+	cout << "****************************************************************" << endl;
+	cout << "****************************************************************" << endl;
+	cout << endl;
+	cout << "----------------------------------------------------------------" << endl;
+
 	// remove dead if statements
 	for (Iterator<Statement> iter = stmts.stmts_of_type(IF_STMT); iter.valid(); ++iter) {
 		Statement& stmt = iter.current();
 
-		cout << "-------------------- if statement -----------------------" << endl;
-
-		cout << stmt << endl;
+		cout << "Statement: " << endl << stmt << endl << "-----------------------" << endl;;
 
 		RefList<Statement> branches;
 		Statement* branch = &stmt;
@@ -221,25 +260,49 @@ void remove_dead_branches(StmtList& stmts, bool& hasChange) {
 
 		RefSet<Statement> stmtsToDelete;
 
-		for (int i = 0; i < branches.entries(); i++) {
-			Statement& branchStmt = branches[i];
+//		RefList<RefSet<Statement> > validBranches;
 
-			// Skip the ENDIF statment at last
+		RefList<Expression> validPredicates;
+
+		RefList<Statement> validBranchHeads;
+		RefList<Statement> validBranchLasts;
+
+		RefList<Statement> deadBranchHeads;
+		RefList<Statement> deadBranchLasts;
+
+		Statement* endIfStmt;
+
+		for (Iterator<Statement> branchIter = branches; branchIter.valid(); ++branchIter) {
+			Statement& branchStmt = branchIter.current();
+			cout << "Branch: " << endl;
+			cout << branchStmt << endl;
+
+			// Skip the ENDIF statement at last
 			if (branchStmt.stmt_class() == ENDIF_STMT) {
+				endIfStmt = &branchStmt;
 				break;
 			}
 
+			RefSet<Statement> allStmtsInBranch;
+
+			// Put all the inner statements in a set, until the next branch
+			Statement* stmtInBranch = branchStmt.next_ref();
+			while (stmtInBranch != branchStmt.follow_ref()) {
+				allStmtsInBranch.ins(*stmtInBranch);
+
+				stmtInBranch = stmtInBranch->next_ref();
+			}
+
+			Statement* firstInBranch = branchStmt.next_ref();
+			Statement* lastInBranch = branchStmt.follow_ref()->prev_ref()->prev_ref();
+
 			if (seenConstTrue) {
-//				stmtsToDelete.ins(branchStmt);
+				// There is already a .TRUE. branch before this one, therefore this branch is dead
+				// stmtsToDelete += allStmtsInBranch;
 
-				// Delete all stmts in the branch
-				Statement* deadStmt = branchStmt.next_ref();
+				deadBranchHeads.ins_last(*firstInBranch);
+				deadBranchLasts.ins_last(*lastInBranch);
 
-				while (deadStmt != &branches[i + 1]) {
-					stmtsToDelete.ins(*deadStmt);
-
-					deadStmt = deadStmt->next_ref();
-				}
 			} else {
 				if (branchStmt.stmt_class() != ELSE_STMT) {
 					Expression& predicate = branchStmt.expr();
@@ -251,29 +314,77 @@ void remove_dead_branches(StmtList& stmts, bool& hasChange) {
 						if (predicateVal == ".TRUE.") {
 							seenConstTrue = true;
 
+							cout << 1 << endl;
+							cout << allStmtsInBranch << endl;
+							cout << 2 << endl;
+							// validBranches.ins_last(allStmtsInBranch);
+							validPredicates.ins_last(predicate);
+							validBranchHeads.ins_last(*firstInBranch);
+							validBranchLasts.ins_last(*lastInBranch);
+
 							// stmtsToDelete.ins(branchStmt);
+
 						} else {
-							Statement* deadStmt = branchStmt.next_ref();
+//							stmtsToDelete += allStmtsInBranch;
 
-							while (deadStmt != &branches[i + 1]) {
-								stmtsToDelete.ins(*deadStmt);
 
-								deadStmt = deadStmt->next_ref();
-							}
+							deadBranchHeads.ins_last(*firstInBranch);
+							deadBranchLasts.ins_last(*lastInBranch);
 						}
+					} else {
+						// Predicate cannot be resolved to a constant at compile time
+						validPredicates.ins_last(predicate);
+						validBranchHeads.ins_last(*firstInBranch);
+						validBranchLasts.ins_last(*lastInBranch);
 					}
 				}
 			}
+
+			cout << "end of branch" << endl;
 		}
 
+		cout << "----------------------------------------------" << endl;
+		cout << "Statements to be deleted: " << endl;
 		cout << stmtsToDelete << endl;
 		cout << "==============" << endl;
+
+//		cout << "Valid statements" << endl;
+//		cout << validBranches << endl;
 
 		if (!stmtsToDelete.empty()) {
 			hasChange = true;
 		}
 
-		stmts.del(stmtsToDelete);
+		for (int i = 0; i < validBranchHeads.entries(); i++) {
+			Expression& predicate = validPredicates[i];
+			Statement& head = validBranchHeads[i];
+			Statement& last = validBranchLasts[i];
+
+			List<Statement> stmtsToMove;
+
+			if (&head == &last) {
+				stmtsToMove.ins_last(stmts.grab(head));
+			} else {
+				stmtsToMove = *stmts.grab(head, last);
+			}
+
+			stmts.ins_after(&stmtsToMove, endIfStmt);
+		}
+
+		for (int i = 0; i < deadBranchHeads.entries(); i++) {
+			Statement& head = deadBranchHeads[i];
+			Statement& last = deadBranchLasts[i];
+
+			if (&head == &last) {
+				stmts.del(head);
+			} else {
+				stmts.del(head, last);
+			}
+		}
+
+		stmts.del(stmt);
+
+		// stmts.del(stmtsToDelete);
 	}
 }
 
@@ -307,6 +418,8 @@ void propagate_constants(ProgramUnit & pgm) {
 		simplify_const_expressions(stmts);
 
 		remove_dead_branches(stmts, hasChange);
+
+
 
 //	} while (hasChange);
 };
