@@ -203,74 +203,66 @@ void propagate_constants(ProgramUnit & pgm) {
 
 		cout << stmt << endl;
 
-//		const Expression& predicate = stmt.expr();
+		RefList<Statement> branches;
+		Statement* branch = &stmt;
 
-//		if (predicate.op() == LOGICAL_CONSTANT_OP) {
-//			if (predicate.str_data() == ".TRUE.") {
+		while (branch) {
+			branches.ins_last(*branch);
 
-				RefList<Statement> branches;
-				Statement* branch = &stmt;
+			branch = branch->follow_ref();
+		}
 
-				while (branch) {
-					branches.ins_last(*branch);
+		cout << branches << endl;
 
-					branch = branch->follow_ref();
+//		int constTrueIndex = -1;
+		bool seenConstTrue = false;
+
+		RefSet<Statement> stmtsToDelete;
+
+		for (int i = 0; i < branches.entries(); i++) {
+			Statement& branchStmt = branches[i];
+
+			// Skip the ENDIF statment at last
+			if (branchStmt.stmt_class() == ENDIF_STMT) {
+				break;
+			}
+
+			if (seenConstTrue) {
+				stmtsToDelete.ins(branchStmt);
+
+				// Delete all stmts in the branch
+				Statement* deadStmt = branchStmt.next_ref();
+
+				while (deadStmt != &branches[i + 1]) {
+					stmtsToDelete.ins(*deadStmt);
+
+					deadStmt = deadStmt->next_ref();
 				}
+			} else {
+				if (branchStmt.stmt_class() != ELSE_STMT) {
+					Expression& predicate = branchStmt.expr();
 
-				cout << branches << endl;
+					if (predicate.op() == LOGICAL_CONSTANT_OP) {
+						String predicateVal = predicate.str_data();
 
-				int constTrueIndex = -1;
+						// Found the constant true predicate, ignore everything after it.
+						if (predicateVal == ".TRUE.") {
+							seenConstTrue = true;
 
-				for (int i = 0; i < branches.entries(); i++) {
-					Statement& branchStmt = branches[i];
+							stmtsToDelete.ins(branchStmt);
+						} else {
+//							stmtsToDelete.ins(branchStmt);
 
-					// Skip the ENDIF statment at last
-					if (branchStmt.stmt_class() == ENDIF_STMT) {
-						break;
-					}
-
-					if (branchStmt.stmt_class() != ELSE_STMT) {
-						Expression& predicate = branchStmt.expr();
-
-						if (predicate.op() == LOGICAL_CONSTANT_OP) {
-							String predicateVal = predicate.str_data();
-
-							// Found the constant true predicate, ignore everything after it.
-							if (predicateVal == ".TRUE.") {
-								constTrueIndex = i;
-							}
 						}
 					}
 				}
+			}
+		}
 
-				// Delete stmts after the first constant true branch
-				RefSet<Statement> stmtsToDelete;
+		cout << stmtsToDelete << endl;
+		cout << "==============" << endl;
 
-				for (int i = constTrueIndex + 1; i < branches.entries() - 1; i++) {
-					Statement& deadBranchStmt = branches[i];
-
-					stmtsToDelete.ins(deadBranchStmt);
-
-					// Delete all stmts in the branch
-					Statement* deadStmt = deadBranchStmt.next_ref();
-//					cout << "dead: " << *deadStmt << endl;
-//					cout << "next dead: " << *deadStmt->next_ref() << endl;
-//					cout << "next next dead: " << *deadStmt->next_ref()->next_ref() << endl;
-//					cout << "next branch" << branches[i + 1] << endl;
-//
-//					cout << (deadStmt->next_ref()->next_ref() == &(branches[i + 1])) << endl;
-
-					while (deadStmt != &branches[i + 1]) {
-						stmtsToDelete.ins(*deadStmt);
-
-						deadStmt = deadStmt->next_ref();
-					}
-				}
-
-				stmts.del(stmtsToDelete);
-//			}
-//		}
+		stmts.del(stmtsToDelete);
 	}
 
-	// Ref: compute const value: int_const_val in https://parasol.tamu.edu/courses/minipolaris/docs/polaris/_prop_const_w_s_8cc-source.html
 };
