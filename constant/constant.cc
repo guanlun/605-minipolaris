@@ -195,6 +195,82 @@ void propagate_constants(ProgramUnit & pgm) {
 		}
 	}
 
+	// remove dead if statements
+	for (Iterator<Statement> iter = stmts.stmts_of_type(IF_STMT); iter.valid(); ++iter) {
+		Statement& stmt = iter.current();
+
+		cout << "-------------------- if statement -----------------------" << endl;
+
+		cout << stmt << endl;
+
+//		const Expression& predicate = stmt.expr();
+
+//		if (predicate.op() == LOGICAL_CONSTANT_OP) {
+//			if (predicate.str_data() == ".TRUE.") {
+
+				RefList<Statement> branches;
+				Statement* branch = &stmt;
+
+				while (branch) {
+					branches.ins_last(*branch);
+
+					branch = branch->follow_ref();
+				}
+
+				cout << branches << endl;
+
+				int constTrueIndex = -1;
+
+				for (int i = 0; i < branches.entries(); i++) {
+					Statement& branchStmt = branches[i];
+
+					// Skip the ENDIF statment at last
+					if (branchStmt.stmt_class() == ENDIF_STMT) {
+						break;
+					}
+
+					if (branchStmt.stmt_class() != ELSE_STMT) {
+						Expression& predicate = branchStmt.expr();
+
+						if (predicate.op() == LOGICAL_CONSTANT_OP) {
+							String predicateVal = predicate.str_data();
+
+							// Found the constant true predicate, ignore everything after it.
+							if (predicateVal == ".TRUE.") {
+								constTrueIndex = i;
+							}
+						}
+					}
+				}
+
+				// Delete stmts after the first constant true branch
+				RefSet<Statement> stmtsToDelete;
+
+				for (int i = constTrueIndex + 1; i < branches.entries() - 1; i++) {
+					Statement& deadBranchStmt = branches[i];
+
+					stmtsToDelete.ins(deadBranchStmt);
+
+					// Delete all stmts in the branch
+					Statement* deadStmt = deadBranchStmt.next_ref();
+//					cout << "dead: " << *deadStmt << endl;
+//					cout << "next dead: " << *deadStmt->next_ref() << endl;
+//					cout << "next next dead: " << *deadStmt->next_ref()->next_ref() << endl;
+//					cout << "next branch" << branches[i + 1] << endl;
+//
+//					cout << (deadStmt->next_ref()->next_ref() == &(branches[i + 1])) << endl;
+
+					while (deadStmt != &branches[i + 1]) {
+						stmtsToDelete.ins(*deadStmt);
+
+						deadStmt = deadStmt->next_ref();
+					}
+				}
+
+				stmts.del(stmtsToDelete);
+//			}
+//		}
+	}
 
 	// Ref: compute const value: int_const_val in https://parasol.tamu.edu/courses/minipolaris/docs/polaris/_prop_const_w_s_8cc-source.html
 };
