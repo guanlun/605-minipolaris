@@ -43,19 +43,7 @@ Expression* replace_expression(Expression* expr, Expression* oldExpr, Expression
 	return expr;
 }
 
-//Expression* replace_constant_symbol(Expression* expr)
-
-void propagate_constants(ProgramUnit & pgm) {
-	StmtList& stmts = pgm.stmts();
-
-	for (DictionaryIter<Symbol> symIter = pgm.symtab().iterator(); symIter.valid(); ++symIter) {
-		Symbol& symbol = symIter.current();
-
-		if (symbol.sym_class() == VARIABLE_CLASS) {
-
-		}
-	}
-
+void replace_const_param_symbols(StmtList& stmts) {
 	for (Iterator<Statement> iter = stmts; iter.valid(); ++iter) {
 		Statement& stmt = iter.current();
 
@@ -76,14 +64,23 @@ void propagate_constants(ProgramUnit & pgm) {
 			}
 		}
 	}
+}
+
+void detect_in_out_sets(StmtList& stmts) {
+	cout << "****************************************************************" << endl;
+	cout << "****************************************************************" << endl;
+	cout << "****************************************************************" << endl;
+	cout << "Analyzing in out sets" << endl;
+	cout << "****************************************************************" << endl;
+	cout << "****************************************************************" << endl;
+	cout << "****************************************************************" << endl;
+	cout << endl;
+	cout << "----------------------------------------------------------------" << endl;
 
 	for (Iterator<Statement> iter = stmts; iter.valid(); ++iter) {
 		Statement& stmt = iter.current();
-		stmt.work_stack().push(new ConstPropWS(PASS_TAG));
-	}
 
-	for (Iterator<Statement> iter = stmts; iter.valid(); ++iter) {
-		Statement& stmt = iter.current();
+		cout << "Statement: " << endl << stmt << endl << "-----------------------" << endl;;
 
 		ConstPropWS* constPropWS = (ConstPropWS*)stmt.work_stack().top_ref(PASS_TAG);
 
@@ -117,8 +114,6 @@ void propagate_constants(ProgramUnit & pgm) {
 				Statement& prevDef = defIter.current();
 
 				if (&prevDef.lhs().symbol() == &assignedSymbol) {
-//					cout << "ASSIGNMENT TO SYMBOL!!!!" << endl;
-
 					resultSet.del(prevDef);
 				}
 			}
@@ -127,8 +122,12 @@ void propagate_constants(ProgramUnit & pgm) {
 		resultSet += genSet;
 
 		constPropWS->outSet = resultSet;
-	}
 
+		cout << "----------------------------------------------------------------" << endl;
+	}
+}
+
+void replace_inset_symbols(StmtList& stmts) {
 	for (Iterator<Statement> iter = stmts; iter.valid(); ++iter) {
 		cout << "---------------------- begin of one stmt ------------------------" << endl;
 
@@ -171,7 +170,9 @@ void propagate_constants(ProgramUnit & pgm) {
 
 		cout << "---------------------- end of one stmt ------------------------" << endl;
 	}
+}
 
+void simplify_const_expressions(StmtList& stmts) {
 	for (Iterator<Statement> iter = stmts; iter.valid(); ++iter) {
 		Statement& stmt = iter.current();
 
@@ -194,7 +195,9 @@ void propagate_constants(ProgramUnit & pgm) {
 			}
 		}
 	}
+}
 
+void remove_dead_branches(StmtList& stmts, bool& hasChange) {
 	// remove dead if statements
 	for (Iterator<Statement> iter = stmts.stmts_of_type(IF_STMT); iter.valid(); ++iter) {
 		Statement& stmt = iter.current();
@@ -214,7 +217,6 @@ void propagate_constants(ProgramUnit & pgm) {
 
 		cout << branches << endl;
 
-//		int constTrueIndex = -1;
 		bool seenConstTrue = false;
 
 		RefSet<Statement> stmtsToDelete;
@@ -228,7 +230,7 @@ void propagate_constants(ProgramUnit & pgm) {
 			}
 
 			if (seenConstTrue) {
-				stmtsToDelete.ins(branchStmt);
+//				stmtsToDelete.ins(branchStmt);
 
 				// Delete all stmts in the branch
 				Statement* deadStmt = branchStmt.next_ref();
@@ -249,10 +251,15 @@ void propagate_constants(ProgramUnit & pgm) {
 						if (predicateVal == ".TRUE.") {
 							seenConstTrue = true;
 
-							stmtsToDelete.ins(branchStmt);
+							// stmtsToDelete.ins(branchStmt);
 						} else {
-//							stmtsToDelete.ins(branchStmt);
+							Statement* deadStmt = branchStmt.next_ref();
 
+							while (deadStmt != &branches[i + 1]) {
+								stmtsToDelete.ins(*deadStmt);
+
+								deadStmt = deadStmt->next_ref();
+							}
 						}
 					}
 				}
@@ -262,7 +269,44 @@ void propagate_constants(ProgramUnit & pgm) {
 		cout << stmtsToDelete << endl;
 		cout << "==============" << endl;
 
+		if (!stmtsToDelete.empty()) {
+			hasChange = true;
+		}
+
 		stmts.del(stmtsToDelete);
 	}
+}
 
+void propagate_constants(ProgramUnit & pgm) {
+	StmtList& stmts = pgm.stmts();
+
+	replace_const_param_symbols(stmts);
+
+	for (Iterator<Statement> iter = stmts; iter.valid(); ++iter) {
+		Statement& stmt = iter.current();
+		stmt.work_stack().push(new ConstPropWS(PASS_TAG));
+	}
+
+	bool hasChange = false;
+
+//	do {
+		detect_in_out_sets(stmts);
+
+		replace_inset_symbols(stmts);
+
+		simplify_const_expressions(stmts);
+
+		remove_dead_branches(stmts, hasChange);
+
+
+		// 2nd time
+		detect_in_out_sets(stmts);
+
+		replace_inset_symbols(stmts);
+
+		simplify_const_expressions(stmts);
+
+		remove_dead_branches(stmts, hasChange);
+
+//	} while (hasChange);
 };
