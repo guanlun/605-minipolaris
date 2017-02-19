@@ -44,6 +44,10 @@ Expression* replace_expression(Expression* expr, Expression* oldExpr, Expression
 	return expr;
 }
 
+inline bool is_const_true_expression(const Expression* expr) {
+	return (expr->op() == LOGICAL_CONSTANT_OP) && (expr->str_data() == ".TRUE.");
+}
+
 void replace_const_param_symbols(StmtList& stmts) {
 	cout << "****************************************************************" << endl;
 	cout << "****************************************************************" << endl;
@@ -275,7 +279,9 @@ void remove_dead_branches(StmtList& stmts, bool& hasChange) {
 	cout << "----------------------------------------------------------------" << endl;
 
 	// remove dead if statements
-	for (Iterator<Statement> iter = stmts.stmts_of_type(IF_STMT); iter.valid(); ++iter) {
+	Iterator<Statement> iter = stmts.stmts_of_type(IF_STMT);
+
+	for (; iter.valid(); ++iter) {
 		cout << "!@#$%^&*)(@!@$%$^*(&" << endl << stmts << endl;
 		Statement& stmt = iter.current();
 
@@ -363,10 +369,24 @@ void remove_dead_branches(StmtList& stmts, bool& hasChange) {
 
 		cout << seenConstTrue << " " << seenConstFalse << endl;
 
+		cout << "----------------------------------------------------" << endl;
+		cout << "Here are all the valid predicates" << endl;
+		cout << validPredicates << endl;
+
 		if (seenConstTrue || seenConstFalse) {
+			Statement* newIfStmt;
+
 			// Create new if-elseif-else branch for valid branches
-			for (int i = 0; i < validPredicates.entries(); i++) {
-				Expression& predicate = validPredicates[i];
+			for (int i = 0; i < validBranchHeads.entries(); i++) {
+				Expression* predicate;
+
+				if (i == validPredicates.entries()) {
+					// More branches than predicates, indicating we have an "else" branch at last
+					predicate = NULL;
+				} else {
+					predicate = &validPredicates[i];
+				}
+
 				Statement& head = validBranchHeads[i];
 				Statement& last = validBranchLasts[i];
 
@@ -376,26 +396,38 @@ void remove_dead_branches(StmtList& stmts, bool& hasChange) {
 				List<Statement>* stmtsToMove = stmts.copy(head, last);
 
 				if (&head == &last) {
-					cout << "grab pussy" << endl;
 					stmts.del(head);
 				} else {
-					cout << "grab pussies" << endl;
 					stmts.del(head, last);
 				}
 
-//				List<Statement> stmtsToMove;
-//
-//				if (&head == &last) {
-//					cout << "grab pussy" << endl;
-//					stmtsToMove.ins_last(stmts.grab(head));
-//				} else {
-//					cout << "grab pussies" << endl;
-//					stmtsToMove = *stmts.grab(head, last);
-//				}
+				Statement* lastInsertedBranchStmt;
 
-				// stmts.ins_after(&stmtsToMove, endIfStmt);
+				if (i == 0) {
+					// First branch, and we should insert an "if"
+					if (is_const_true_expression(predicate)) {
+						// First branch is already constant true, no need for the entire if-else structure
+						stmts.ins_after(stmtsToMove, endIfStmt);
+						break;
 
-				stmts.ins_before(stmtsToMove, &stmt);
+					} else {
+						newIfStmt = &stmts.ins_IF_after(predicate->clone(), endIfStmt);
+						lastInsertedBranchStmt = newIfStmt;
+
+						stmts.ins_after(stmtsToMove, lastInsertedBranchStmt);
+					}
+				} else {
+
+					if ((predicate == NULL) || is_const_true_expression(predicate)) {
+						// Meet a constant true branch in one of the "elseif"s, just change it to "else"
+						lastInsertedBranchStmt = &stmts.ins_ELSE_after(newIfStmt);
+						stmts.ins_after(stmtsToMove, lastInsertedBranchStmt);
+						break;
+					} else {
+						lastInsertedBranchStmt = &stmts.ins_ELSEIF_after(predicate->clone(), newIfStmt);
+						stmts.ins_after(stmtsToMove, lastInsertedBranchStmt);
+					}
+				}
 			}
 
 			for (int i = 0; i < deadBranchHeads.entries(); i++) {
@@ -411,8 +443,6 @@ void remove_dead_branches(StmtList& stmts, bool& hasChange) {
 
 			// Delete the entire if-elseif-else branch by deleting the "if" statement
 			stmts.del(stmt);
-
-//			break;
 		}
 	}
 }
@@ -440,13 +470,13 @@ void propagate_constants(ProgramUnit & pgm) {
 
 
 		// 2nd time
-		detect_in_out_sets(stmts);
-
-		replace_inset_symbols(stmts);
-
-		simplify_const_expressions(stmts);
-
-		remove_dead_branches(stmts, hasChange);
+//		detect_in_out_sets(stmts);
+//
+//		replace_inset_symbols(stmts);
+//
+//		simplify_const_expressions(stmts);
+//
+//		remove_dead_branches(stmts, hasChange);
 
 
 
