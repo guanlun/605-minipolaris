@@ -91,11 +91,18 @@ void detect_in_out_sets(StmtList& stmts) {
 	cout << "----------------------------------------------------------------" << endl;
 
 	for (Iterator<Statement> iter = stmts; iter.valid(); ++iter) {
+		cout << 1 << endl;
 		Statement& stmt = iter.current();
 
 		cout << "Statement: " << endl << stmt << endl << "-----------------------" << endl;;
 
 		ConstPropWS* constPropWS = (ConstPropWS*)stmt.work_stack().top_ref(PASS_TAG);
+
+		// TODO: Really hacky
+		if (!constPropWS) {
+			stmt.work_stack().push(new ConstPropWS(PASS_TAG));
+			constPropWS = (ConstPropWS*)stmt.work_stack().top_ref(PASS_TAG);
+		}
 
 		RefSet<Statement> predecessors = stmt.pred();
 
@@ -104,7 +111,7 @@ void detect_in_out_sets(StmtList& stmts) {
 		RefSet<Statement> killSet;
 
 		RefSet<Statement> resultSet;
-
+		cout << 2 << endl;
 		// Iterate through all predecessors
 		for	(Iterator<Statement> predStmtIter = predecessors; predStmtIter.valid(); ++predStmtIter) {
 			Statement& predStmt = predStmtIter.current();
@@ -113,8 +120,14 @@ void detect_in_out_sets(StmtList& stmts) {
 			stmt_set_intersection(inSet, predConstPropWS->outSet);
 		}
 
+		cout << 3 << endl;
+		cout << constPropWS << endl;
+
 		constPropWS->inSet = inSet;
+		cout << 3.5 << endl;
 		resultSet += inSet;
+
+		cout << 4 << endl;
 
 		cout << "inset: " << inSet << endl;
 
@@ -228,6 +241,28 @@ void simplify_const_expressions(StmtList& stmts) {
 	}
 }
 
+void _remove_dead_branches(StmtList& stmts, bool& hasChange) {
+	cout << "****************************************************************" << endl;
+	cout << "****************************************************************" << endl;
+	cout << "****************************************************************" << endl;
+	cout << "Removing dead branches" << endl;
+	cout << "****************************************************************" << endl;
+	cout << "****************************************************************" << endl;
+	cout << "****************************************************************" << endl;
+	cout << endl;
+	cout << "----------------------------------------------------------------" << endl;
+
+	for (Iterator<Statement> iter = stmts.stmts_of_type(IF_STMT); iter.valid(); ++iter) {
+		Statement& ifStmt = iter.current();
+
+		Statement& endIfStmt = *ifStmt.matching_endif_ref();
+
+		Statement& nextBranchStmt = *ifStmt.follow_ref();
+
+		stmts.del(nextBranchStmt, endIfStmt);
+	}
+}
+
 void remove_dead_branches(StmtList& stmts, bool& hasChange) {
 	cout << "****************************************************************" << endl;
 	cout << "****************************************************************" << endl;
@@ -241,6 +276,7 @@ void remove_dead_branches(StmtList& stmts, bool& hasChange) {
 
 	// remove dead if statements
 	for (Iterator<Statement> iter = stmts.stmts_of_type(IF_STMT); iter.valid(); ++iter) {
+		cout << "!@#$%^&*)(@!@$%$^*(&" << endl << stmts << endl;
 		Statement& stmt = iter.current();
 
 		cout << "Statement: " << endl << stmt << endl << "-----------------------" << endl;;
@@ -256,12 +292,6 @@ void remove_dead_branches(StmtList& stmts, bool& hasChange) {
 
 		cout << branches << endl;
 
-		bool seenConstTrue = false;
-
-		RefSet<Statement> stmtsToDelete;
-
-//		RefList<RefSet<Statement> > validBranches;
-
 		RefList<Expression> validPredicates;
 
 		RefList<Statement> validBranchHeads;
@@ -270,7 +300,10 @@ void remove_dead_branches(StmtList& stmts, bool& hasChange) {
 		RefList<Statement> deadBranchHeads;
 		RefList<Statement> deadBranchLasts;
 
-		Statement* endIfStmt;
+		Statement* endIfStmt = stmt.matching_endif_ref();
+
+		bool seenConstTrue = false;
+		bool seenConstFalse = false;
 
 		for (Iterator<Statement> branchIter = branches; branchIter.valid(); ++branchIter) {
 			Statement& branchStmt = branchIter.current();
@@ -278,28 +311,17 @@ void remove_dead_branches(StmtList& stmts, bool& hasChange) {
 			cout << branchStmt << endl;
 
 			// Skip the ENDIF statement at last
-			if (branchStmt.stmt_class() == ENDIF_STMT) {
-				endIfStmt = &branchStmt;
+			if (&branchStmt == endIfStmt) {
 				break;
 			}
 
-			RefSet<Statement> allStmtsInBranch;
-
-			// Put all the inner statements in a set, until the next branch
-			Statement* stmtInBranch = branchStmt.next_ref();
-			while (stmtInBranch != branchStmt.follow_ref()) {
-				allStmtsInBranch.ins(*stmtInBranch);
-
-				stmtInBranch = stmtInBranch->next_ref();
-			}
-
 			Statement* firstInBranch = branchStmt.next_ref();
+
+			// Follow ref is the next branch stmt, prev is implied goto and prev prev is the actual stmt
 			Statement* lastInBranch = branchStmt.follow_ref()->prev_ref()->prev_ref();
 
 			if (seenConstTrue) {
 				// There is already a .TRUE. branch before this one, therefore this branch is dead
-				// stmtsToDelete += allStmtsInBranch;
-
 				deadBranchHeads.ins_last(*firstInBranch);
 				deadBranchLasts.ins_last(*lastInBranch);
 
@@ -314,19 +336,11 @@ void remove_dead_branches(StmtList& stmts, bool& hasChange) {
 						if (predicateVal == ".TRUE.") {
 							seenConstTrue = true;
 
-							cout << 1 << endl;
-							cout << allStmtsInBranch << endl;
-							cout << 2 << endl;
-							// validBranches.ins_last(allStmtsInBranch);
 							validPredicates.ins_last(predicate);
 							validBranchHeads.ins_last(*firstInBranch);
 							validBranchLasts.ins_last(*lastInBranch);
-
-							// stmtsToDelete.ins(branchStmt);
-
 						} else {
-//							stmtsToDelete += allStmtsInBranch;
-
+							seenConstFalse = true;
 
 							deadBranchHeads.ins_last(*firstInBranch);
 							deadBranchLasts.ins_last(*lastInBranch);
@@ -337,54 +351,69 @@ void remove_dead_branches(StmtList& stmts, bool& hasChange) {
 						validBranchHeads.ins_last(*firstInBranch);
 						validBranchLasts.ins_last(*lastInBranch);
 					}
+				} else {
+					// Else statement (last one), and there's no const TRUE in any statements above
+					validBranchHeads.ins_last(*firstInBranch);
+					validBranchLasts.ins_last(*lastInBranch);
 				}
 			}
 
 			cout << "end of branch" << endl;
 		}
 
-		cout << "----------------------------------------------" << endl;
-		cout << "Statements to be deleted: " << endl;
-		cout << stmtsToDelete << endl;
-		cout << "==============" << endl;
+		cout << seenConstTrue << " " << seenConstFalse << endl;
 
-//		cout << "Valid statements" << endl;
-//		cout << validBranches << endl;
+		if (seenConstTrue || seenConstFalse) {
+			// Create new if-elseif-else branch for valid branches
+			for (int i = 0; i < validPredicates.entries(); i++) {
+				Expression& predicate = validPredicates[i];
+				Statement& head = validBranchHeads[i];
+				Statement& last = validBranchLasts[i];
 
-		if (!stmtsToDelete.empty()) {
-			hasChange = true;
-		}
+				cout << "head: " << head << endl;
+				cout << "last: " << last << endl;
 
-		for (int i = 0; i < validBranchHeads.entries(); i++) {
-			Expression& predicate = validPredicates[i];
-			Statement& head = validBranchHeads[i];
-			Statement& last = validBranchLasts[i];
+				List<Statement>* stmtsToMove = stmts.copy(head, last);
 
-			List<Statement> stmtsToMove;
+				if (&head == &last) {
+					cout << "grab pussy" << endl;
+					stmts.del(head);
+				} else {
+					cout << "grab pussies" << endl;
+					stmts.del(head, last);
+				}
 
-			if (&head == &last) {
-				stmtsToMove.ins_last(stmts.grab(head));
-			} else {
-				stmtsToMove = *stmts.grab(head, last);
+//				List<Statement> stmtsToMove;
+//
+//				if (&head == &last) {
+//					cout << "grab pussy" << endl;
+//					stmtsToMove.ins_last(stmts.grab(head));
+//				} else {
+//					cout << "grab pussies" << endl;
+//					stmtsToMove = *stmts.grab(head, last);
+//				}
+
+				// stmts.ins_after(&stmtsToMove, endIfStmt);
+
+				stmts.ins_before(stmtsToMove, &stmt);
 			}
 
-			stmts.ins_after(&stmtsToMove, endIfStmt);
-		}
+			for (int i = 0; i < deadBranchHeads.entries(); i++) {
+				Statement& head = deadBranchHeads[i];
+				Statement& last = deadBranchLasts[i];
 
-		for (int i = 0; i < deadBranchHeads.entries(); i++) {
-			Statement& head = deadBranchHeads[i];
-			Statement& last = deadBranchLasts[i];
-
-			if (&head == &last) {
-				stmts.del(head);
-			} else {
-				stmts.del(head, last);
+				if (&head == &last) {
+					stmts.del(head);
+				} else {
+					stmts.del(head, last);
+				}
 			}
+
+			// Delete the entire if-elseif-else branch by deleting the "if" statement
+			stmts.del(stmt);
+
+//			break;
 		}
-
-		stmts.del(stmt);
-
-		// stmts.del(stmtsToDelete);
 	}
 }
 
