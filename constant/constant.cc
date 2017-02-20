@@ -119,68 +119,83 @@ void detect_in_out_sets(StmtList& stmts) {
 	cout << endl;
 	cout << "----------------------------------------------------------------" << endl;
 
-	for (Iterator<Statement> iter = stmts; iter.valid(); ++iter) {
-		Statement& stmt = iter.current();
+	bool changed = true;
 
-		cout << "Statement: " << endl << stmt << endl << "-----------------------" << endl;;
+	while (changed) {
+		changed = false;
+		for (Iterator<Statement> iter = stmts; iter.valid(); ++iter) {
+			Statement& stmt = iter.current();
 
-		ConstPropWS* constPropWS = (ConstPropWS*)stmt.work_stack().top_ref(PASS_TAG);
+			cout << "Statement: " << endl << stmt << endl << "-----------------------" << endl;;
 
-		// TODO: Really hacky
-		if (!constPropWS) {
-			stmt.work_stack().push(new ConstPropWS(PASS_TAG));
-			constPropWS = (ConstPropWS*)stmt.work_stack().top_ref(PASS_TAG);
-		}
+			ConstPropWS* constPropWS = (ConstPropWS*)stmt.work_stack().top_ref(PASS_TAG);
 
-		RefSet<Statement> predecessors = stmt.pred();
-
-		RefSet<Statement> inSet;
-		RefSet<Statement> genSet;
-		RefSet<Statement> killSet;
-
-		RefSet<Statement> resultSet;
-
-		int predStmtIdx = 0;
-
-		// Iterate through all predecessors
-		for	(Iterator<Statement> predStmtIter = predecessors;
-				predStmtIter.valid();
-				++predStmtIter, ++predStmtIdx) {
-			Statement& predStmt = predStmtIter.current();
-
-			ConstPropWS* predConstPropWS = (ConstPropWS*)predStmt.work_stack().top_ref(PASS_TAG);
-
-			if (predStmtIdx == 0) {
-				inSet = predConstPropWS->outSet;
-			} else {
-				stmt_set_intersection(inSet, predConstPropWS->outSet);
+			// TODO: Really hacky
+			if (!constPropWS) {
+				stmt.work_stack().push(new ConstPropWS(PASS_TAG));
+				constPropWS = (ConstPropWS*)stmt.work_stack().top_ref(PASS_TAG);
 			}
-		}
 
-		cout << constPropWS << endl;
+			RefSet<Statement> predecessors = stmt.pred();
 
-		constPropWS->inSet = inSet;
-		resultSet += inSet;
+			RefSet<Statement> inSet;
+			RefSet<Statement> genSet;
+			RefSet<Statement> killSet;
 
-		cout << "inset: " << inSet << endl;
+			RefSet<Statement> resultSet;
 
-		if (stmt.stmt_class() == ASSIGNMENT_STMT) {
-			genSet.ins(stmt);
+			int predStmtIdx = 0;
 
-			Symbol& assignedSymbol = stmt.lhs().symbol();
+			// Iterate through all predecessors
+			for	(Iterator<Statement> predStmtIter = predecessors;
+					predStmtIter.valid();
+					++predStmtIter) {
+				Statement& predStmt = predStmtIter.current();
 
-			for (Iterator<Statement> defIter = resultSet; defIter.valid(); ++defIter) {
-				Statement& prevDef = defIter.current();
+				ConstPropWS* predConstPropWS = (ConstPropWS*)predStmt.work_stack().top_ref(PASS_TAG);
 
-				if (&prevDef.lhs().symbol() == &assignedSymbol) {
-					resultSet.del(prevDef);
+				if (predConstPropWS) {
+					// Predecessor already has a WorkSpace, meaning that it has been visited before.
+					// We do not consider predecessors that hasn't been visited, because otherwise the
+					// intersection would always lead to an empty set (e.g. do statements).
+					if (predStmtIdx == 0) {
+						inSet = predConstPropWS->outSet;
+					} else {
+						stmt_set_intersection(inSet, predConstPropWS->outSet);
+					}
+
+					++predStmtIdx;
 				}
 			}
+
+			constPropWS->inSet = inSet;
+			resultSet += inSet;
+
+			cout << "inset: " << inSet << endl;
+
+			if (stmt.stmt_class() == ASSIGNMENT_STMT) {
+				genSet.ins(stmt);
+
+				Symbol& assignedSymbol = stmt.lhs().symbol();
+
+				for (Iterator<Statement> defIter = resultSet; defIter.valid(); ++defIter) {
+					Statement& prevDef = defIter.current();
+
+					if (&prevDef.lhs().symbol() == &assignedSymbol) {
+						resultSet.del(prevDef);
+					}
+				}
+			}
+
+			resultSet += genSet;
+
+			if (!(constPropWS->outSet == resultSet)) {
+				// Something changed in the out set, need another iteration
+				constPropWS->outSet = resultSet;
+
+				changed = true;
+			}
 		}
-
-		resultSet += genSet;
-
-		constPropWS->outSet = resultSet;
 
 		cout << "----------------------------------------------------------------" << endl;
 	}
@@ -453,19 +468,35 @@ void remove_dead_branches(StmtList& stmts, bool& hasChange) {
 	}
 }
 
+void clean_workspace(StmtList& stmts) {
+	for (Iterator<Statement> iter = stmts;
+		iter.valid(); ++iter) {
+		Statement& stmt = iter.current();
+
+		stmt.work_stack().pop(PASS_TAG);
+	}
+}
+
 void propagate_constants(ProgramUnit & pgm) {
 	StmtList& stmts = pgm.stmts();
 
 	replace_const_param_symbols(pgm);
 
-	for (Iterator<Statement> iter = stmts; iter.valid(); ++iter) {
-		Statement& stmt = iter.current();
-		stmt.work_stack().push(new ConstPropWS(PASS_TAG));
-	}
-
 	bool hasChange = false;
 
 //	do {
+		detect_in_out_sets(stmts);
+
+		replace_inset_symbols(stmts);
+
+		simplify_const_expressions(stmts);
+
+		remove_dead_branches(stmts, hasChange);
+
+		clean_workspace(stmts);
+
+
+		// 2nd time
 //		detect_in_out_sets(stmts);
 //
 //		replace_inset_symbols(stmts);
@@ -474,17 +505,7 @@ void propagate_constants(ProgramUnit & pgm) {
 //
 //		remove_dead_branches(stmts, hasChange);
 //
-//
-//		// 2nd time
-//		detect_in_out_sets(stmts);
-//
-//		replace_inset_symbols(stmts);
-//
-//		simplify_const_expressions(stmts);
-//
-//		remove_dead_branches(stmts, hasChange);
-
-
+//		clean_workspace(stmts);
 
 //	} while (hasChange);
 };
