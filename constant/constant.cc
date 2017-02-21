@@ -77,6 +77,8 @@ void replace_const_param_symbols(ProgramUnit& pgm) {
 	for (DictionaryIter<Symbol> symIter = pgm.symtab().iterator(); symIter.valid(); ++symIter) {
 		Symbol& symbol = symIter.current();
 
+		cout << symbol << endl;
+
 		if (symbol.sym_class() == SYMBOLIC_CONSTANT_CLASS) {
 			constLookup.insert(pair<Symbol*, Expression*>(&symbol, symbol.expr_ref()));
 		}
@@ -129,18 +131,13 @@ void detect_in_out_sets(StmtList& stmts) {
 				constPropWS = (ConstPropWS*)stmt.work_stack().top_ref(PASS_TAG);
 			}
 
-			RefSet<Statement> predecessors = stmt.pred();
-
-			RefSet<Statement> inSet;
 			RefSet<Statement> genSet;
-			RefSet<Statement> killSet;
-
 			RefSet<Statement> resultSet;
 
 			int predStmtIdx = 0;
 
 			// Iterate through all predecessors
-			for	(Iterator<Statement> predStmtIter = predecessors;
+			for	(Iterator<Statement> predStmtIter = stmt.pred();
 					predStmtIter.valid();
 					++predStmtIter) {
 				Statement& predStmt = predStmtIter.current();
@@ -152,19 +149,20 @@ void detect_in_out_sets(StmtList& stmts) {
 					// We do not consider predecessors that hasn't been visited, because otherwise the
 					// intersection would always lead to an empty set (e.g. do statements).
 					if (predStmtIdx == 0) {
-						inSet = predConstPropWS->outSet;
+						constPropWS->inSet = predConstPropWS->outSet;
 					} else {
-						stmt_set_intersection(inSet, predConstPropWS->outSet);
+						stmt_set_intersection(constPropWS->inSet, predConstPropWS->outSet);
 					}
+
+					constPropWS->allDefSet += predConstPropWS->allDefSet;
 
 					++predStmtIdx;
 				}
 			}
 
-			constPropWS->inSet = inSet;
-			resultSet += inSet;
+			resultSet += constPropWS->inSet;
 
-			cout << "inset: " << inSet << endl;
+			cout << "inset: " << constPropWS->inSet << endl;
 
 			if (stmt.stmt_class() == ASSIGNMENT_STMT) {
 				genSet.ins(stmt);
@@ -179,6 +177,7 @@ void detect_in_out_sets(StmtList& stmts) {
 			}
 
 			resultSet += genSet;
+			constPropWS->allDefSet += genSet;
 
 			if (!(constPropWS->outSet == resultSet)) {
 				// Something changed in the out set, need another iteration
@@ -208,58 +207,54 @@ void replace_inset_symbols(StmtList& stmts) {
 		cout << "-----------------------" << "Statement: " << endl << stmt << endl << endl;
 
 		ConstPropWS* constPropWS = (ConstPropWS*)stmt.work_stack().top_ref(PASS_TAG);
-		RefSet<Statement> defs = constPropWS->inSet;
 
 		for (Mutator<Expression> exprIter = stmt.iterate_in_exprs_guarded();
 			exprIter.valid();
 			++exprIter) {
 			Expression& expr = exprIter.current();
 
-			for (Iterator<Statement> defIter = defs; defIter.valid(); ++defIter) {
+			for (Iterator<Statement> defIter = constPropWS->inSet; defIter.valid(); ++defIter) {
 				Statement& def = defIter.current();
-
-				cout << "def: " << def << endl;
-				cout << "lhs: " << def.lhs() << endl;
-				cout << "rhs: " << def.rhs() << endl;
 
 				if (expr.op() == DELETED_EXPRESSION_OP) {
 					break;
 				}
 
-				exprIter.assign() = replace_expression(&expr, &def.lhs(), def.rhs().clone());
+				Expression* replaced = replace_expression(&expr, &def.lhs(), def.rhs().clone());
+				Expression* simplifiedExpr = simplify(replaced->clone());
+
+				switch (simplifiedExpr->op()) {
+				case INTEGER_CONSTANT_OP:
+				case REAL_CONSTANT_OP:
+				case STRING_CONSTANT_OP:
+				case LOGICAL_CONSTANT_OP:
+					exprIter.assign() = simplifiedExpr->clone();
+					break;
+				}
 			}
+
+//			for (Iterator<Statement> defIter = constPropWS->allDefSet; defIter.valid(); ++defIter) {
+//				Statement& def = defIter.current();
+//
+//				cout << "EXPR!!!!!!!!!!!!!!!!!!!!!!!1" << endl;
+//				cout << expr << endl;
+//			}
 		}
 	}
-}
 
-void simplify_const_expressions(StmtList& stmts) {
-	cout << "****************************************************************" << endl;
-	cout << "****************************************************************" << endl;
-	cout << "****************************************************************" << endl;
-	cout << "Simplifying const expressions" << endl;
-	cout << "****************************************************************" << endl;
-	cout << "****************************************************************" << endl;
-	cout << "****************************************************************" << endl;
-	cout << endl;
-	cout << "----------------------------------------------------------------" << endl;
-
-	for (Iterator<Statement> iter = stmts; iter.valid(); ++iter) {
-		Statement& stmt = iter.current();
-
-		cout << "-----------------------" << "Statement: " << endl << stmt << endl << endl;
-
-		for (Mutator<Expression> exprIter = stmt.iterate_in_exprs_guarded();
-			exprIter.valid();
-			++exprIter) {
-			Expression& expr = exprIter.current();
-
-			Expression* simplifiedExpr = simplify(expr.clone());
-
-			cout << expr << " is simplified to " << *simplifiedExpr << endl;
-
-			exprIter.assign() = simplifiedExpr->clone();
-		}
-	}
+//	for (Iterator<Statement> iter = stmts; iter.valid(); ++iter) {
+//		Statement& stmt = iter.current();
+//		cout << "-----------------------" << "Statement: " << endl << stmt << endl << endl;
+//
+//		ConstPropWS* constPropWS = (ConstPropWS*)stmt.work_stack().top_ref(PASS_TAG);
+//
+//		for (Mutator<Expression> exprIter = stmt.iterate_in_exprs_guarded();
+//			exprIter.valid();
+//			++exprIter) {
+//			Expression& expr = exprIter.current();
+//
+//		}
+//	}
 }
 
 void remove_dead_branches(StmtList& stmts, bool& hasChange) {
@@ -289,8 +284,6 @@ void remove_dead_branches(StmtList& stmts, bool& hasChange) {
 
 			branch = branch->follow_ref();
 		}
-
-		cout << branches << endl;
 
 		RefList<Expression> validPredicates;
 
@@ -467,7 +460,6 @@ void propagate_constants(ProgramUnit & pgm) {
 		hasChange = false;
 		detect_in_out_sets(stmts);
 		replace_inset_symbols(stmts);
-		simplify_const_expressions(stmts);
 		remove_dead_branches(stmts, hasChange);
 		clean_workspace(stmts);
 	} while (hasChange);

@@ -1,10 +1,15 @@
-        PROGRAM TEST17
+        PROGRAM TEST16
         INTEGER*4 i,j,k
-        dimension i(10), j(10)
+        i = 4
 
-        i(1) = 4
-        j(1) = i(1)
-
-        print *, i(1), i(2)
+		IF (i .EQ. j) THEN
+			k = 1
+		ELSE
+			k = 2
+		ENDIF
+		
+		if (k .EQ. 3) THEN
+			i = 5
+		ENDIF
         STOP
         END
