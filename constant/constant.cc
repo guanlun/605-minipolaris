@@ -236,17 +236,6 @@ void replace_inset_symbols(StmtList& stmts) {
 				}
 
 				exprIter.assign() = replace_expression(&expr, &def.lhs(), def.rhs().clone());
-
-//				if (expr.op() == ID_OP) {
-//					cout << "is ID" << endl;
-//					if (&expr.symbol() == &def.lhs().symbol()) {
-//						cout << "replacing ID" << endl;
-//						exprIter.assign() = replace_expression(&expr, &def.lhs(), &def.rhs());
-//					}
-//				} else {
-//					cout << "not ID: " << expr.op() << endl;
-//					exprIter.assign() = replace_expression(&expr, &def.lhs(), &def.rhs());
-//				}
 			}
 		}
 	}
@@ -266,7 +255,7 @@ void simplify_const_expressions(StmtList& stmts) {
 	for (Iterator<Statement> iter = stmts; iter.valid(); ++iter) {
 		Statement& stmt = iter.current();
 
-		cout << "Statement: " << endl << stmt << endl << "-----------------------" << endl;;
+		cout << "Statement: " << endl << stmt << endl << "-----------------------" << endl;
 
 		for (Mutator<Expression> exprIter = stmt.iterate_in_exprs_guarded();
 			exprIter.valid();
@@ -277,14 +266,7 @@ void simplify_const_expressions(StmtList& stmts) {
 
 			cout << expr << " is simplified to " << *simplifiedExpr << endl;
 
-			switch (simplifiedExpr->op()) {
-			case LOGICAL_CONSTANT_OP:
-				exprIter.assign() = simplifiedExpr->clone();
-				break;
-			case INTEGER_CONSTANT_OP:
-				exprIter.assign() = simplifiedExpr->clone();
-				break;
-			}
+			exprIter.assign() = simplifiedExpr->clone();
 		}
 	}
 }
@@ -388,7 +370,12 @@ void remove_dead_branches(StmtList& stmts, bool& hasChange) {
 			cout << "end of branch" << endl;
 		}
 
-		cout << seenConstTrue << " " << seenConstFalse << endl;
+		if (seenConstTrue || seenConstFalse) {
+			// Since there are one iteration for each if-elseif-else statement, we should not use
+			// hasChange = seenConstTrue || seenConstFalse. This is because hasChange might be set
+			// back to false in the 2nd loop and we'll lose that information.
+			hasChange = true;
+		}
 
 		cout << "----------------------------------------------------" << endl;
 		cout << "Here are all the valid predicates" << endl;
@@ -424,9 +411,10 @@ void remove_dead_branches(StmtList& stmts, bool& hasChange) {
 
 				Statement* lastInsertedBranchStmt;
 
+				// TODO: clean this up a bit
 				if (i == 0) {
 					// First branch, and we should insert an "if"
-					if (is_const_true_expression(predicate)) {
+					if ((predicate == NULL) || is_const_true_expression(predicate)) {
 						// First branch is already constant true, no need for the entire if-else structure
 						stmts.ins_after(stmtsToMove, endIfStmt);
 						break;
@@ -437,8 +425,8 @@ void remove_dead_branches(StmtList& stmts, bool& hasChange) {
 
 						stmts.ins_after(stmtsToMove, lastInsertedBranchStmt);
 					}
-				} else {
 
+				} else {
 					if ((predicate == NULL) || is_const_true_expression(predicate)) {
 						// Meet a constant true branch in one of the "elseif"s, just change it to "else"
 						lastInsertedBranchStmt = &stmts.ins_ELSE_after(newIfStmt);
@@ -484,28 +472,12 @@ void propagate_constants(ProgramUnit & pgm) {
 
 	bool hasChange = false;
 
-//	do {
+	do {
+		hasChange = false;
 		detect_in_out_sets(stmts);
-
 		replace_inset_symbols(stmts);
-
 		simplify_const_expressions(stmts);
-
 		remove_dead_branches(stmts, hasChange);
-
 		clean_workspace(stmts);
-
-
-		// 2nd time
-//		detect_in_out_sets(stmts);
-//
-//		replace_inset_symbols(stmts);
-//
-//		simplify_const_expressions(stmts);
-//
-//		remove_dead_branches(stmts, hasChange);
-//
-//		clean_workspace(stmts);
-
-//	} while (hasChange);
+	} while (hasChange);
 };
