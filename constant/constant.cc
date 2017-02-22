@@ -50,6 +50,20 @@ Expression* replace_expression(Expression* expr, Expression* oldExpr, Expression
 	return expr;
 }
 
+bool expr_in_expr(Expression* needle, Expression* haystack) {
+	if (*needle == *haystack) {
+		return true;
+	} else {
+		for (Iterator<Expression> iter = haystack->arg_list(); iter.valid(); ++iter) {
+			if (expr_in_expr(needle, &iter.current())) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+}
+
 inline bool is_const_true_expression(const Expression* expr) {
 	return (expr->op() == LOGICAL_CONSTANT_OP) && (expr->str_data() == ".TRUE.");
 }
@@ -171,6 +185,16 @@ void detect_in_out_sets(StmtList& stmts, bool useUnionOperator = false) {
 
 					if (stmt.lhs() == prevDef.lhs()) {
 						resultSet.del(prevDef);
+					} else if (expr_in_expr(&stmt.lhs(), &prevDef.rhs())) {
+						cout << "EXPR IN EXPR!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << endl;
+						cout << "EXPR IN EXPR!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << endl;
+						cout << "EXPR IN EXPR!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << endl;
+						cout << "EXPR IN EXPR!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << endl;
+						cout << "EXPR IN EXPR!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << endl;
+						cout << stmt.lhs() << endl;
+						cout << prevDef.rhs() << endl;
+
+						resultSet.del(prevDef);
 					}
 				}
 			}
@@ -191,7 +215,7 @@ void detect_in_out_sets(StmtList& stmts, bool useUnionOperator = false) {
 	}
 }
 
-void replace_inset_symbols(StmtList& stmts) {
+void replace_inset_symbols(StmtList& stmts, bool& hasChange) {
 	cout << "****************************************************************" << endl;
 	cout << "****************************************************************" << endl;
 	cout << "****************************************************************" << endl;
@@ -208,7 +232,7 @@ void replace_inset_symbols(StmtList& stmts) {
 
 		ConstPropWS* constPropWS = (ConstPropWS*)stmt.work_stack().top_ref(PASS_TAG);
 
-		for (Mutator<Expression> exprIter = stmt.iterate_in_exprs_guarded();
+		for (Mutator<Expression> exprIter = stmt.in_refs();
 			exprIter.valid();
 			++exprIter) {
 			Expression& expr = exprIter.current();
@@ -221,14 +245,64 @@ void replace_inset_symbols(StmtList& stmts) {
 				}
 
 				Expression* replaced = replace_expression(&expr, &def.lhs(), def.rhs().clone());
-				Expression* simplifiedExpr = simplify(replaced->clone());
 
+				if (!(expr == *replaced)) {
+					exprIter.assign() = replaced;
+					hasChange = true;
+				}
+
+//				Expression* simplifiedExpr = simplify(replaced->clone());
+//
+//				switch (simplifiedExpr->op()) {
+//				case INTEGER_CONSTANT_OP:
+//				case REAL_CONSTANT_OP:
+//				case STRING_CONSTANT_OP:
+//				case LOGICAL_CONSTANT_OP:
+//					exprIter.assign() = simplifiedExpr->clone();
+//					break;
+//				}
+			}
+		}
+	}
+}
+
+void simplify_const_expressions(StmtList& stmts, bool& hasChange) {
+	cout << "****************************************************************" << endl;
+	cout << "****************************************************************" << endl;
+	cout << "****************************************************************" << endl;
+	cout << "Simplifying const expressions" << endl;
+	cout << "****************************************************************" << endl;
+	cout << "****************************************************************" << endl;
+	cout << "****************************************************************" << endl;
+	cout << endl;
+	cout << "----------------------------------------------------------------" << endl;
+
+	for (Iterator<Statement> iter = stmts; iter.valid(); ++iter) {
+		Statement& stmt = iter.current();
+
+		cout << "-----------------------" << "Statement: " << endl << stmt << endl << endl;
+
+		for (Mutator<Expression> exprIter = stmt.iterate_in_exprs_guarded();
+			exprIter.valid();
+			++exprIter) {
+			Expression& expr = exprIter.current();
+
+//			cout << "THIS IS EXPRESSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSIIIIIIIIIIIOOOOOOOOOOOONNNNN!!!!" << endl;
+//			cout << expr << endl;
+			Expression* simplifiedExpr = simplify(expr.clone());
+//			cout << *simplifiedExpr << endl;
+//			cout << (expr == *simplifiedExpr) << endl;
+//			cout << "OP TYPE: " << simplifiedExpr->op() << endl;
+
+			if (!(expr == *simplifiedExpr)) {
 				switch (simplifiedExpr->op()) {
 				case INTEGER_CONSTANT_OP:
 				case REAL_CONSTANT_OP:
 				case STRING_CONSTANT_OP:
 				case LOGICAL_CONSTANT_OP:
+				case COMMA_OP:
 					exprIter.assign() = simplifiedExpr->clone();
+					hasChange = true;
 					break;
 				}
 			}
@@ -480,6 +554,7 @@ void clean_workspace(StmtList& stmts) {
 
 		stmt.work_stack().pop(PASS_TAG);
 
+		// Re-build the in and out refs, since deleting statements would not re-link them.
 		stmt.build_refs();
 	}
 }
@@ -494,7 +569,8 @@ void propagate_constants(ProgramUnit & pgm) {
 	do {
 		hasChange = false;
 		detect_in_out_sets(stmts);
-		replace_inset_symbols(stmts);
+		replace_inset_symbols(stmts, hasChange);
+		simplify_const_expressions(stmts, hasChange);
 		remove_dead_branches(stmts, hasChange);
 		clean_workspace(stmts);
 	} while (hasChange);
