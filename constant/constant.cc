@@ -69,24 +69,12 @@ inline bool is_const_true_expression(const Expression* expr) {
 }
 
 void replace_const_param_symbols(ProgramUnit& pgm) {
-	cout << "****************************************************************" << endl;
-	cout << "****************************************************************" << endl;
-	cout << "****************************************************************" << endl;
-	cout << "Replacing const param symbols" << endl;
-	cout << "****************************************************************" << endl;
-	cout << "****************************************************************" << endl;
-	cout << "****************************************************************" << endl;
-	cout << endl;
-	cout << "----------------------------------------------------------------" << endl;
-
 	StmtList& stmts = pgm.stmts();
 
 	map<Symbol*, Expression*> constLookup;
 
 	for (DictionaryIter<Symbol> symIter = pgm.symtab().iterator(); symIter.valid(); ++symIter) {
 		Symbol& symbol = symIter.current();
-
-		cout << symbol << endl;
 
 		if (symbol.sym_class() == SYMBOLIC_CONSTANT_CLASS) {
 			constLookup.insert(pair<Symbol*, Expression*>(&symbol, symbol.expr_ref()));
@@ -95,8 +83,6 @@ void replace_const_param_symbols(ProgramUnit& pgm) {
 
 	for (Iterator<Statement> iter = stmts; iter.valid(); ++iter) {
 		Statement& stmt = iter.current();
-
-		cout << "Statement: " << endl << stmt << endl << "-----------------------" << endl;;
 
 		for (Mutator<Expression> exprIter = stmt.in_refs();
 			exprIter.valid();
@@ -114,16 +100,6 @@ void replace_const_param_symbols(ProgramUnit& pgm) {
 }
 
 void detect_in_out_sets(StmtList& stmts, bool useUnionOperator = false) {
-	cout << "****************************************************************" << endl;
-	cout << "****************************************************************" << endl;
-	cout << "****************************************************************" << endl;
-	cout << "Analyzing in out sets" << endl;
-	cout << "****************************************************************" << endl;
-	cout << "****************************************************************" << endl;
-	cout << "****************************************************************" << endl;
-	cout << endl;
-	cout << "----------------------------------------------------------------" << endl;
-
 	bool changed = true;
 	int iterCount = 0;
 
@@ -131,8 +107,6 @@ void detect_in_out_sets(StmtList& stmts, bool useUnionOperator = false) {
 		changed = false;
 		for (Iterator<Statement> iter = stmts; iter.valid(); ++iter) {
 			Statement& stmt = iter.current();
-
-			cout << "-----------------------" << "Statement: " << endl << stmt << endl << endl;
 
 			ConstPropWS* constPropWS = (ConstPropWS*)stmt.work_stack().top_ref(PASS_TAG);
 
@@ -148,8 +122,8 @@ void detect_in_out_sets(StmtList& stmts, bool useUnionOperator = false) {
 
 			// Iterate through all predecessors
 			for	(Iterator<Statement> predStmtIter = stmt.pred();
-					predStmtIter.valid();
-					++predStmtIter) {
+				predStmtIter.valid();
+				++predStmtIter) {
 				Statement& predStmt = predStmtIter.current();
 
 				ConstPropWS* predConstPropWS = (ConstPropWS*)predStmt.work_stack().top_ref(PASS_TAG);
@@ -175,8 +149,6 @@ void detect_in_out_sets(StmtList& stmts, bool useUnionOperator = false) {
 
 			resultSet += constPropWS->inSet;
 
-			cout << "inset: " << constPropWS->inSet << endl;
-
 			if (stmt.stmt_class() == ASSIGNMENT_STMT) {
 				genSet.ins(stmt);
 
@@ -186,14 +158,6 @@ void detect_in_out_sets(StmtList& stmts, bool useUnionOperator = false) {
 					if (stmt.lhs() == prevDef.lhs()) {
 						resultSet.del(prevDef);
 					} else if (expr_in_expr(&stmt.lhs(), &prevDef.rhs())) {
-						cout << "EXPR IN EXPR!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << endl;
-						cout << "EXPR IN EXPR!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << endl;
-						cout << "EXPR IN EXPR!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << endl;
-						cout << "EXPR IN EXPR!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << endl;
-						cout << "EXPR IN EXPR!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << endl;
-						cout << stmt.lhs() << endl;
-						cout << prevDef.rhs() << endl;
-
 						resultSet.del(prevDef);
 					}
 				}
@@ -210,25 +174,12 @@ void detect_in_out_sets(StmtList& stmts, bool useUnionOperator = false) {
 		}
 
 		iterCount++;
-
-		cout << "----------------------------------------------------------------" << endl;
 	}
 }
 
 void replace_inset_symbols(StmtList& stmts, bool& hasChange) {
-	cout << "****************************************************************" << endl;
-	cout << "****************************************************************" << endl;
-	cout << "****************************************************************" << endl;
-	cout << "Replacing inset symbols" << endl;
-	cout << "****************************************************************" << endl;
-	cout << "****************************************************************" << endl;
-	cout << "****************************************************************" << endl;
-	cout << endl;
-	cout << "----------------------------------------------------------------" << endl;
-
 	for (Iterator<Statement> iter = stmts; iter.valid(); ++iter) {
 		Statement& stmt = iter.current();
-		cout << "-----------------------" << "Statement: " << endl << stmt << endl << endl;
 
 		ConstPropWS* constPropWS = (ConstPropWS*)stmt.work_stack().top_ref(PASS_TAG);
 
@@ -244,55 +195,34 @@ void replace_inset_symbols(StmtList& stmts, bool& hasChange) {
 					break;
 				}
 
-				Expression* replaced = replace_expression(&expr, &def.lhs(), def.rhs().clone());
+				switch (def.rhs().op()) {
+				case INTEGER_CONSTANT_OP:
+				case REAL_CONSTANT_OP:
+				case STRING_CONSTANT_OP:
+				case LOGICAL_CONSTANT_OP:
+					Expression* replaced = replace_expression(&expr, &def.lhs(), def.rhs().clone());
 
-				if (!(expr == *replaced)) {
-					exprIter.assign() = replaced;
-					hasChange = true;
+					if (!(expr == *replaced)) {
+						exprIter.assign() = replaced;
+						hasChange = true;
+					}
+					break;
 				}
-
-//				Expression* simplifiedExpr = simplify(replaced->clone());
-//
-//				switch (simplifiedExpr->op()) {
-//				case INTEGER_CONSTANT_OP:
-//				case REAL_CONSTANT_OP:
-//				case STRING_CONSTANT_OP:
-//				case LOGICAL_CONSTANT_OP:
-//					exprIter.assign() = simplifiedExpr->clone();
-//					break;
-//				}
 			}
 		}
 	}
 }
 
 void simplify_const_expressions(StmtList& stmts, bool& hasChange) {
-	cout << "****************************************************************" << endl;
-	cout << "****************************************************************" << endl;
-	cout << "****************************************************************" << endl;
-	cout << "Simplifying const expressions" << endl;
-	cout << "****************************************************************" << endl;
-	cout << "****************************************************************" << endl;
-	cout << "****************************************************************" << endl;
-	cout << endl;
-	cout << "----------------------------------------------------------------" << endl;
-
 	for (Iterator<Statement> iter = stmts; iter.valid(); ++iter) {
 		Statement& stmt = iter.current();
-
-		cout << "-----------------------" << "Statement: " << endl << stmt << endl << endl;
 
 		for (Mutator<Expression> exprIter = stmt.iterate_in_exprs_guarded();
 			exprIter.valid();
 			++exprIter) {
 			Expression& expr = exprIter.current();
 
-//			cout << "THIS IS EXPRESSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSIIIIIIIIIIIOOOOOOOOOOOONNNNN!!!!" << endl;
-//			cout << expr << endl;
 			Expression* simplifiedExpr = simplify(expr.clone());
-//			cout << *simplifiedExpr << endl;
-//			cout << (expr == *simplifiedExpr) << endl;
-//			cout << "OP TYPE: " << simplifiedExpr->op() << endl;
 
 			if (!(expr == *simplifiedExpr)) {
 				switch (simplifiedExpr->op()) {
@@ -311,23 +241,11 @@ void simplify_const_expressions(StmtList& stmts, bool& hasChange) {
 }
 
 void remove_dead_branches(StmtList& stmts, bool& hasChange) {
-	cout << "****************************************************************" << endl;
-	cout << "****************************************************************" << endl;
-	cout << "****************************************************************" << endl;
-	cout << "Removing dead branches" << endl;
-	cout << "****************************************************************" << endl;
-	cout << "****************************************************************" << endl;
-	cout << "****************************************************************" << endl;
-	cout << endl;
-	cout << "----------------------------------------------------------------" << endl;
-
 	// remove dead if statements
 	Iterator<Statement> iter = stmts.stmts_of_type(IF_STMT);
 
 	for (; iter.valid(); ++iter) {
 		Statement& stmt = iter.current();
-
-		cout << "-----------------------" << "Statement: " << endl << stmt << endl << endl;
 
 		RefList<Statement> branches;
 		Statement* branch = &stmt;
@@ -353,8 +271,6 @@ void remove_dead_branches(StmtList& stmts, bool& hasChange) {
 
 		for (Iterator<Statement> branchIter = branches; branchIter.valid(); ++branchIter) {
 			Statement& branchStmt = branchIter.current();
-			cout << "Branch: " << endl;
-			cout << branchStmt << endl;
 
 			// Skip the ENDIF statement at last
 			if (&branchStmt == endIfStmt) {
@@ -483,46 +399,22 @@ void remove_dead_branches(StmtList& stmts, bool& hasChange) {
 	}
 }
 
-void remove_unused_variables(StmtList& stmts) {
-	cout << "****************************************************************" << endl;
-	cout << "****************************************************************" << endl;
-	cout << "****************************************************************" << endl;
-	cout << "Removing unused variables" << endl;
-	cout << "****************************************************************" << endl;
-	cout << "****************************************************************" << endl;
-	cout << "****************************************************************" << endl;
-	cout << endl;
-	cout << "----------------------------------------------------------------" << endl;
-
+void remove_unused_variables(StmtList& stmts, bool& hasChange) {
 	for (Iterator<Statement> iter = stmts;
 		iter.valid(); ++iter) {
 		Statement& stmt = iter.current();
 
 		ConstPropWS* constPropWS = (ConstPropWS*)stmt.work_stack().top_ref(PASS_TAG);
 
-		cout << "$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$" << endl;
-		cout << stmt << endl;
-		cout << stmt.in_refs() << endl;
-
 		for (Iterator<Expression> exprIter = stmt.in_refs();
 			exprIter.valid();
 			++exprIter) {
-			cout << 1 << endl;
 			Expression& expr = exprIter.current();
-			cout << 1 << endl;
-
-//			if (expr.op() != ID_OP) {
-//				continue;
-//			}
 
 			for (Iterator<Statement> defIter = constPropWS->inSet;
 				defIter.valid();
 				++defIter) {
 				Statement& def = defIter.current();
-
-				cout << expr << "                         " << def.lhs() << endl;
-//				cout << expr.op() << endl;
-//				cout << (&expr.symbol() == &def.lhs().symbol()) << endl;
 
 				if (expr == def.lhs()) {
 					ConstPropWS* defConstPropWS = (ConstPropWS*)def.work_stack().top_ref(PASS_TAG);
@@ -540,11 +432,11 @@ void remove_unused_variables(StmtList& stmts) {
 
 		if (constPropWS->refCount == 0) {
 			stmts.del(stmt);
+			hasChange = true;
 		}
 	}
 
-	// Remove any empty branches
-
+	// TODO: Remove any empty branches
 }
 
 void clean_workspace(StmtList& stmts) {
@@ -564,7 +456,7 @@ void propagate_constants(ProgramUnit & pgm) {
 
 	replace_const_param_symbols(pgm);
 
-	bool hasChange = false;
+	bool hasChange;
 
 	do {
 		hasChange = false;
@@ -575,7 +467,10 @@ void propagate_constants(ProgramUnit & pgm) {
 		clean_workspace(stmts);
 	} while (hasChange);
 
-	detect_in_out_sets(stmts, true);
-	remove_unused_variables(stmts);
-	clean_workspace(stmts);
+	do {
+		hasChange = false;
+		detect_in_out_sets(stmts, true);
+		remove_unused_variables(stmts, hasChange);
+		clean_workspace(stmts);
+	} while (hasChange);
 };

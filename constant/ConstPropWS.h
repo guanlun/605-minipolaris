@@ -3,7 +3,7 @@
 
 class ConstPropWS : public WorkSpace {
 public:
-	ConstPropWS(int pass_tag);
+	ConstPropWS(int pass_tag) : WorkSpace(pass_tag), refCount(0) {}
 
 	Listable *listable_clone() const { return NULL; };
 
@@ -15,11 +15,6 @@ public:
 	RefSet<Statement> outSet;
 
 	int refCount;
-private:
-
 };
-
-ConstPropWS::ConstPropWS(int pass_tag) : WorkSpace(pass_tag), refCount(0) {
-}
 
 #endif
