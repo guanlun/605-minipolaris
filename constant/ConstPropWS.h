@@ -13,12 +13,13 @@ public:
 
 	RefSet<Statement> inSet;
 	RefSet<Statement> outSet;
-	RefSet<Statement> allDefSet;
+
+	int refCount;
 private:
 
 };
 
-ConstPropWS::ConstPropWS(int pass_tag) : WorkSpace(pass_tag) {
+ConstPropWS::ConstPropWS(int pass_tag) : WorkSpace(pass_tag), refCount(0) {
 }
 
 #endif

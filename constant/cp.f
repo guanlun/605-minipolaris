@@ -1,15 +1,26 @@
         PROGRAM TEST16
         INTEGER*4 i,j,k
         i = 4
+        j = i
+        if ( j .EQ. i) then
+           j = 3
+        else
+           j = 7
+        endif
+        if ( j .EQ. 3) then
+          print *,j
+        else
+          k = 2
+        endif
+        if ( k .EQ. 2) then
+           k = 7
+           print *,k
+        else
+           k = 10
+           print *,k
+        endif
 
-		IF (i .EQ. j) THEN
-			k = 1
-		ELSE
-			k = 2
-		ENDIF
-		
-		if (k .EQ. 3) THEN
-			i = 5
-		ENDIF
+        k = i 
+        print *, k,j
         STOP
         END

@@ -5,13 +5,8 @@
 #include "constant.h"
 #include "StmtList.h"
 #include "Statement/Statement.h"
-#include "Statement/IfStmt.h"
-#include "Expression/IntConstExpr.h"
 #include "Expression/expr_funcs.h"
-#include "Symbol/SymbolicConstantSymbol.h"
-#include "Collection/RefMap.h"
 #include "DictionaryIter.h"
-#include "Collection/KeyIterator.h"
 
 #include <map>
 
@@ -89,7 +84,7 @@ void replace_const_param_symbols(ProgramUnit& pgm) {
 
 		cout << "Statement: " << endl << stmt << endl << "-----------------------" << endl;;
 
-		for (Mutator<Expression> exprIter = stmt.iterate_in_exprs_guarded();
+		for (Mutator<Expression> exprIter = stmt.in_refs();
 			exprIter.valid();
 			++exprIter) {
 			Expression& expr = exprIter.current();
@@ -104,7 +99,7 @@ void replace_const_param_symbols(ProgramUnit& pgm) {
 	}
 }
 
-void detect_in_out_sets(StmtList& stmts) {
+void detect_in_out_sets(StmtList& stmts, bool useUnionOperator = false) {
 	cout << "****************************************************************" << endl;
 	cout << "****************************************************************" << endl;
 	cout << "****************************************************************" << endl;
@@ -116,6 +111,7 @@ void detect_in_out_sets(StmtList& stmts) {
 	cout << "----------------------------------------------------------------" << endl;
 
 	bool changed = true;
+	int iterCount = 0;
 
 	while (changed) {
 		changed = false;
@@ -148,13 +144,16 @@ void detect_in_out_sets(StmtList& stmts) {
 					// Predecessor already has a WorkSpace, meaning that it has been visited before.
 					// We do not consider predecessors that hasn't been visited, because otherwise the
 					// intersection would always lead to an empty set (e.g. do statements).
-					if (predStmtIdx == 0) {
-						constPropWS->inSet = predConstPropWS->outSet;
-					} else {
-						stmt_set_intersection(constPropWS->inSet, predConstPropWS->outSet);
-					}
 
-					constPropWS->allDefSet += predConstPropWS->allDefSet;
+					if (useUnionOperator) {
+						constPropWS->inSet += predConstPropWS->outSet;
+					} else {
+						if (predStmtIdx == 0) {
+							constPropWS->inSet = predConstPropWS->outSet;
+						} else {
+							stmt_set_intersection(constPropWS->inSet, predConstPropWS->outSet);
+						}
+					}
 
 					++predStmtIdx;
 				}
@@ -177,7 +176,6 @@ void detect_in_out_sets(StmtList& stmts) {
 			}
 
 			resultSet += genSet;
-			constPropWS->allDefSet += genSet;
 
 			if (!(constPropWS->outSet == resultSet)) {
 				// Something changed in the out set, need another iteration
@@ -186,6 +184,8 @@ void detect_in_out_sets(StmtList& stmts) {
 				changed = true;
 			}
 		}
+
+		iterCount++;
 
 		cout << "----------------------------------------------------------------" << endl;
 	}
@@ -232,29 +232,8 @@ void replace_inset_symbols(StmtList& stmts) {
 					break;
 				}
 			}
-
-//			for (Iterator<Statement> defIter = constPropWS->allDefSet; defIter.valid(); ++defIter) {
-//				Statement& def = defIter.current();
-//
-//				cout << "EXPR!!!!!!!!!!!!!!!!!!!!!!!1" << endl;
-//				cout << expr << endl;
-//			}
 		}
 	}
-
-//	for (Iterator<Statement> iter = stmts; iter.valid(); ++iter) {
-//		Statement& stmt = iter.current();
-//		cout << "-----------------------" << "Statement: " << endl << stmt << endl << endl;
-//
-//		ConstPropWS* constPropWS = (ConstPropWS*)stmt.work_stack().top_ref(PASS_TAG);
-//
-//		for (Mutator<Expression> exprIter = stmt.iterate_in_exprs_guarded();
-//			exprIter.valid();
-//			++exprIter) {
-//			Expression& expr = exprIter.current();
-//
-//		}
-//	}
 }
 
 void remove_dead_branches(StmtList& stmts, bool& hasChange) {
@@ -350,8 +329,6 @@ void remove_dead_branches(StmtList& stmts, bool& hasChange) {
 					validBranchLasts.ins_last(*lastInBranch);
 				}
 			}
-
-			cout << "end of branch" << endl;
 		}
 
 		if (seenConstTrue || seenConstFalse) {
@@ -360,10 +337,6 @@ void remove_dead_branches(StmtList& stmts, bool& hasChange) {
 			// back to false in the 2nd loop and we'll lose that information.
 			hasChange = true;
 		}
-
-		cout << "----------------------------------------------------" << endl;
-		cout << "Here are all the valid predicates" << endl;
-		cout << validPredicates << endl;
 
 		if (seenConstTrue || seenConstFalse) {
 			Statement* newIfStmt;
@@ -382,9 +355,6 @@ void remove_dead_branches(StmtList& stmts, bool& hasChange) {
 				Statement& head = validBranchHeads[i];
 				Statement& last = validBranchLasts[i];
 
-				cout << "head: " << head << endl;
-				cout << "last: " << last << endl;
-
 				List<Statement>* stmtsToMove = stmts.copy(head, last);
 
 				if (&head == &last) {
@@ -395,7 +365,6 @@ void remove_dead_branches(StmtList& stmts, bool& hasChange) {
 
 				Statement* lastInsertedBranchStmt;
 
-				// TODO: clean this up a bit
 				if (i == 0) {
 					// First branch, and we should insert an "if"
 					if ((predicate == NULL) || is_const_true_expression(predicate)) {
@@ -440,12 +409,78 @@ void remove_dead_branches(StmtList& stmts, bool& hasChange) {
 	}
 }
 
+void remove_unused_variables(StmtList& stmts) {
+	cout << "****************************************************************" << endl;
+	cout << "****************************************************************" << endl;
+	cout << "****************************************************************" << endl;
+	cout << "Removing unused variables" << endl;
+	cout << "****************************************************************" << endl;
+	cout << "****************************************************************" << endl;
+	cout << "****************************************************************" << endl;
+	cout << endl;
+	cout << "----------------------------------------------------------------" << endl;
+
+	for (Iterator<Statement> iter = stmts;
+		iter.valid(); ++iter) {
+		Statement& stmt = iter.current();
+
+		ConstPropWS* constPropWS = (ConstPropWS*)stmt.work_stack().top_ref(PASS_TAG);
+
+		cout << "$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$" << endl;
+		cout << stmt << endl;
+		cout << stmt.in_refs() << endl;
+
+		for (Iterator<Expression> exprIter = stmt.in_refs();
+			exprIter.valid();
+			++exprIter) {
+			cout << 1 << endl;
+			Expression& expr = exprIter.current();
+			cout << 1 << endl;
+
+//			if (expr.op() != ID_OP) {
+//				continue;
+//			}
+
+			for (Iterator<Statement> defIter = constPropWS->inSet;
+				defIter.valid();
+				++defIter) {
+				Statement& def = defIter.current();
+
+				cout << expr << "                         " << def.lhs() << endl;
+//				cout << expr.op() << endl;
+//				cout << (&expr.symbol() == &def.lhs().symbol()) << endl;
+
+				if (expr == def.lhs()) {
+					ConstPropWS* defConstPropWS = (ConstPropWS*)def.work_stack().top_ref(PASS_TAG);
+					defConstPropWS->refCount++;
+				}
+			}
+		}
+	}
+
+	for (Iterator<Statement> iter = stmts.stmts_of_type(ASSIGNMENT_STMT);
+		iter.valid(); ++iter) {
+		Statement& stmt = iter.current();
+
+		ConstPropWS* constPropWS = (ConstPropWS*)stmt.work_stack().top_ref(PASS_TAG);
+
+		if (constPropWS->refCount == 0) {
+			stmts.del(stmt);
+		}
+	}
+
+	// Remove any empty branches
+
+}
+
 void clean_workspace(StmtList& stmts) {
 	for (Iterator<Statement> iter = stmts;
 		iter.valid(); ++iter) {
 		Statement& stmt = iter.current();
 
 		stmt.work_stack().pop(PASS_TAG);
+
+		stmt.build_refs();
 	}
 }
 
@@ -463,4 +498,8 @@ void propagate_constants(ProgramUnit & pgm) {
 		remove_dead_branches(stmts, hasChange);
 		clean_workspace(stmts);
 	} while (hasChange);
+
+	detect_in_out_sets(stmts, true);
+	remove_unused_variables(stmts);
+	clean_workspace(stmts);
 };
