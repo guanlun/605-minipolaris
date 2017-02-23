@@ -1,7 +1,6 @@
 // 
 // constant.cc : constant propagation pass
-// 
-
+//
 #include "constant.h"
 #include "StmtList.h"
 #include "Statement/Statement.h"
@@ -48,6 +47,30 @@ Expression* replace_expression(Expression* expr, Expression* oldExpr, Expression
 	}
 
 	return expr;
+}
+
+void find_function_helper(RefList<Expression>& funcExprs, Expression& expr) {
+	if (expr.op() == FUNCTION_CALL_OP) {
+		funcExprs.ins_last(expr);
+	} else {
+		for (Iterator<Expression> exprIter = expr.arg_list(); exprIter.valid(); ++exprIter) {
+			find_function_helper(funcExprs, exprIter.current());
+		}
+	}
+}
+
+RefList<Expression> find_function_calls_in_stmt(Statement& stmt) {
+	RefList<Expression> exprList;
+
+	for (Iterator<Expression> exprIter = stmt.iterate_all_expressions();
+		exprIter.valid();
+		++exprIter) {
+		Expression& expr = exprIter.current();
+
+		find_function_helper(exprList, expr);
+	}
+
+	return exprList;
 }
 
 bool expr_in_expr(Expression* needle, Expression* haystack) {
@@ -100,11 +123,14 @@ void replace_const_param_symbols(ProgramUnit& pgm) {
 }
 
 void detect_in_out_sets(StmtList& stmts, bool useUnionOperator = false) {
+	cout << "detecting in out sets也要按照基本法" << endl;
+	cout << stmts << endl;
 	bool changed = true;
 	int iterCount = 0;
 
 	while (changed) {
 		changed = false;
+
 		for (Iterator<Statement> iter = stmts; iter.valid(); ++iter) {
 			Statement& stmt = iter.current();
 
@@ -139,6 +165,7 @@ void detect_in_out_sets(StmtList& stmts, bool useUnionOperator = false) {
 						if (predStmtIdx == 0) {
 							constPropWS->inSet = predConstPropWS->outSet;
 						} else {
+							cout << "intersect  " << constPropWS->inSet << endl;
 							stmt_set_intersection(constPropWS->inSet, predConstPropWS->outSet);
 						}
 					}
@@ -146,6 +173,46 @@ void detect_in_out_sets(StmtList& stmts, bool useUnionOperator = false) {
 					++predStmtIdx;
 				}
 			}
+
+			if (!constPropWS->inSet.empty()) {
+				cout << "clear" << endl;
+				constPropWS->inSet.del(constPropWS->inSet._element(0));
+			}
+
+//			for (Iterator<Statement> defIter = constPropWS->inSet; defIter.valid(); ++defIter) {
+//				constPropWS->inSet.del(defIter.current());
+//			}
+
+			/*
+			RefList<Expression> functionCallExprs = find_function_calls_in_stmt(stmt);
+			if (functionCallExprs.entries() > 0) {
+//				RefSet<Statement> invalidDefsByFunctionParam;
+
+				for (Iterator<Expression> funcIter = functionCallExprs; funcIter.valid(); ++funcIter) {
+					Expression& funcCallExpr = funcIter.current();
+
+					const RefList<Expression>* paramList = funcCallExpr.parameters_guarded().arg_refs();
+					for (Iterator<Expression> paramIter = paramList;
+						paramIter.valid();
+						++paramIter) {
+						Expression& param = paramIter.current();
+
+						for (Iterator<Statement> defIter = constPropWS->inSet; defIter.valid(); ++defIter) {
+							Statement& prevDef = defIter.current();
+							cout << constPropWS->inSet << endl;
+
+							if (param == prevDef.lhs()) {
+//								invalidDefsByFunctionParam.ins(prevDef);
+//								constPropWS->inSet.del(prevDef);
+								break;
+							}
+						}
+					}
+				}
+
+//				constPropWS->inSet -= invalidDefsByFunctionParam;
+			}
+			*/
 
 			resultSet += constPropWS->inSet;
 
@@ -175,6 +242,8 @@ void detect_in_out_sets(StmtList& stmts, bool useUnionOperator = false) {
 
 		iterCount++;
 	}
+
+	cout << "ho" << endl;
 }
 
 void replace_inset_symbols(StmtList& stmts, bool& hasChange) {
@@ -428,6 +497,16 @@ void remove_unused_variables(StmtList& stmts, bool& hasChange) {
 		iter.valid(); ++iter) {
 		Statement& stmt = iter.current();
 
+		if (stmt.lhs().op() == ARRAY_REF_OP) {
+			continue;
+		}
+
+		// Function calls might have side effects, do not remove function calls.
+		RefList<Expression> functionCallExprs = find_function_calls_in_stmt(stmt);
+		if (functionCallExprs.entries() > 0) {
+			continue;
+		}
+
 		ConstPropWS* constPropWS = (ConstPropWS*)stmt.work_stack().top_ref(PASS_TAG);
 
 		if (constPropWS->refCount == 0) {
@@ -461,9 +540,13 @@ void propagate_constants(ProgramUnit & pgm) {
 	do {
 		hasChange = false;
 		detect_in_out_sets(stmts);
+		cout << "!!!!!!!!!!" << endl;
 		replace_inset_symbols(stmts, hasChange);
+		cout << 2 << endl;
 		simplify_const_expressions(stmts, hasChange);
+		cout << 3 << endl;
 		remove_dead_branches(stmts, hasChange);
+		cout << 4 << endl;
 		clean_workspace(stmts);
 	} while (hasChange);
 
