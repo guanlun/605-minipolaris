@@ -122,9 +122,7 @@ void replace_const_param_symbols(ProgramUnit& pgm) {
 	}
 }
 
-void detect_in_out_sets(StmtList& stmts, bool useUnionOperator = false) {
-	cout << "detecting in out sets也要按照基本法" << endl;
-	cout << stmts << endl;
+void detect_in_out_sets(StmtList& stmts, bool removingUnusedVar = false) {
 	bool changed = true;
 	int iterCount = 0;
 
@@ -159,9 +157,12 @@ void detect_in_out_sets(StmtList& stmts, bool useUnionOperator = false) {
 					// We do not consider predecessors that hasn't been visited, because otherwise the
 					// intersection would always lead to an empty set (e.g. do statements).
 
-					if (useUnionOperator) {
+					if (removingUnusedVar) {
+						// When doing unused variable removal, use the union operator instead.
 						constPropWS->inSet += predConstPropWS->outSet;
+
 					} else {
+						// The following block act as the intersection operator
 						if (predStmtIdx == 0) {
 							constPropWS->inSet = predConstPropWS->outSet;
 						} else {
@@ -174,45 +175,43 @@ void detect_in_out_sets(StmtList& stmts, bool useUnionOperator = false) {
 				}
 			}
 
-			if (!constPropWS->inSet.empty()) {
-				cout << "clear" << endl;
-				constPropWS->inSet.del(constPropWS->inSet._element(0));
-			}
+			if (!removingUnusedVar) {
+				// For any variables passed to functions as parameters, as Fortran uses pass-by-reference,
+				// we cannot assume that they would not change inside the functions, therefore we cannot
+				// propagation constant values to them. Also, as their value may change, we should kill
+				// any previous definitions of that variable.
+				RefList<Expression> functionCallExprs = find_function_calls_in_stmt(stmt);
 
-//			for (Iterator<Statement> defIter = constPropWS->inSet; defIter.valid(); ++defIter) {
-//				constPropWS->inSet.del(defIter.current());
-//			}
+				if (functionCallExprs.entries() > 0) {
+					RefSet<Statement> invalidDefsByFunctionParam;
 
-			/*
-			RefList<Expression> functionCallExprs = find_function_calls_in_stmt(stmt);
-			if (functionCallExprs.entries() > 0) {
-//				RefSet<Statement> invalidDefsByFunctionParam;
+					for (Iterator<Expression> funcIter = functionCallExprs; funcIter.valid(); ++funcIter) {
+						Expression& funcCallExpr = funcIter.current();
 
-				for (Iterator<Expression> funcIter = functionCallExprs; funcIter.valid(); ++funcIter) {
-					Expression& funcCallExpr = funcIter.current();
+						const RefList<Expression>* paramList = funcCallExpr.parameters_guarded().arg_refs();
 
-					const RefList<Expression>* paramList = funcCallExpr.parameters_guarded().arg_refs();
-					for (Iterator<Expression> paramIter = paramList;
-						paramIter.valid();
-						++paramIter) {
-						Expression& param = paramIter.current();
+						for (Iterator<Expression> paramIter = paramList;
+							paramIter.valid();
+							++paramIter) {
+							// Iterator each function parameter
+							Expression& param = paramIter.current();
 
-						for (Iterator<Statement> defIter = constPropWS->inSet; defIter.valid(); ++defIter) {
-							Statement& prevDef = defIter.current();
-							cout << constPropWS->inSet << endl;
+							for (Iterator<Statement> defIter = constPropWS->inSet; defIter.valid(); ++defIter) {
+								Statement& prevDef = defIter.current();
 
-							if (param == prevDef.lhs()) {
-//								invalidDefsByFunctionParam.ins(prevDef);
-//								constPropWS->inSet.del(prevDef);
-								break;
+								if (param == prevDef.lhs()) {
+									// Function parameter defined before, but we cannot propagate to parameters,
+									// therefore we keep it in a temp set and remove it later.
+									invalidDefsByFunctionParam.ins(prevDef);
+									break;
+								}
 							}
 						}
 					}
-				}
 
-//				constPropWS->inSet -= invalidDefsByFunctionParam;
+					constPropWS->inSet -= invalidDefsByFunctionParam;
+				}
 			}
-			*/
 
 			resultSet += constPropWS->inSet;
 
@@ -242,8 +241,6 @@ void detect_in_out_sets(StmtList& stmts, bool useUnionOperator = false) {
 
 		iterCount++;
 	}
-
-	cout << "ho" << endl;
 }
 
 void replace_inset_symbols(StmtList& stmts, bool& hasChange) {
@@ -497,7 +494,9 @@ void remove_unused_variables(StmtList& stmts, bool& hasChange) {
 		iter.valid(); ++iter) {
 		Statement& stmt = iter.current();
 
-		if (stmt.lhs().op() == ARRAY_REF_OP) {
+		Expression& lhsExpr = stmt.lhs();
+
+		if (lhsExpr.op() == ARRAY_REF_OP) {
 			continue;
 		}
 
@@ -514,8 +513,6 @@ void remove_unused_variables(StmtList& stmts, bool& hasChange) {
 			hasChange = true;
 		}
 	}
-
-	// TODO: Remove any empty branches
 }
 
 void clean_workspace(StmtList& stmts) {
@@ -540,13 +537,9 @@ void propagate_constants(ProgramUnit & pgm) {
 	do {
 		hasChange = false;
 		detect_in_out_sets(stmts);
-		cout << "!!!!!!!!!!" << endl;
 		replace_inset_symbols(stmts, hasChange);
-		cout << 2 << endl;
 		simplify_const_expressions(stmts, hasChange);
-		cout << 3 << endl;
 		remove_dead_branches(stmts, hasChange);
-		cout << 4 << endl;
 		clean_workspace(stmts);
 	} while (hasChange);
 
