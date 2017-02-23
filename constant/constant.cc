@@ -73,6 +73,34 @@ RefList<Expression> find_function_calls_in_stmt(Statement& stmt) {
 	return exprList;
 }
 
+void find_common_helper(RefList<Expression>& commonExprs, Expression& expr) {
+	if (expr.op() == ID_OP) {
+		Symbol& symbol = expr.symbol();
+
+		if (symbol.common_ref() != NULL) {
+			commonExprs.ins_last(expr);
+		}
+	} else {
+		for (Iterator<Expression> exprIter = expr.arg_list(); exprIter.valid(); ++exprIter) {
+			find_common_helper(commonExprs, exprIter.current());
+		}
+	}
+}
+
+RefList<Expression> find_common_variables_in_stmt(Statement& stmt) {
+	RefList<Expression> exprList;
+
+	for (Iterator<Expression> exprIter = stmt.iterate_all_expressions();
+		exprIter.valid();
+		++exprIter) {
+		Expression& expr = exprIter.current();
+
+		find_common_helper(exprList, expr);
+	}
+
+	return exprList;
+}
+
 bool expr_in_expr(Expression* needle, Expression* haystack) {
 	if (*needle == *haystack) {
 		return true;
@@ -176,15 +204,32 @@ void detect_in_out_sets(StmtList& stmts, bool removingUnusedVar = false) {
 			}
 
 			if (!removingUnusedVar) {
-				// For any variables passed to functions as parameters, as Fortran uses pass-by-reference,
-				// we cannot assume that they would not change inside the functions, therefore we cannot
-				// propagation constant values to them. Also, as their value may change, we should kill
-				// any previous definitions of that variable.
 				RefList<Expression> functionCallExprs = find_function_calls_in_stmt(stmt);
 
 				if (functionCallExprs.entries() > 0) {
-					RefSet<Statement> invalidDefsByFunctionParam;
+					// This statement contains at least one function call.
+					RefSet<Statement> invalidDefs;
 
+					// At function calls, remove all the COMMON variables from the in set, as the callee
+					// might change them.
+					RefList<Expression> commonVariables = find_common_variables_in_stmt(stmt);
+
+					for (Iterator<Expression> commonIter = commonVariables; commonIter.valid(); ++commonIter) {
+						Expression& commonExpr = commonIter.current();
+
+						for (Iterator<Statement> defIter = constPropWS->inSet; defIter.valid(); ++defIter) {
+							Statement& prevDef = defIter.current();
+
+							if (commonExpr == prevDef.lhs()) {
+								invalidDefs.ins(prevDef);
+							}
+						}
+					}
+
+					// For any variables passed to functions as parameters, as Fortran uses pass-by-reference,
+					// we cannot assume that they would not change inside the functions, therefore we cannot
+					// propagation constant values to them. Also, as their value may change, we should kill
+					// any previous definitions of that variable.
 					for (Iterator<Expression> funcIter = functionCallExprs; funcIter.valid(); ++funcIter) {
 						Expression& funcCallExpr = funcIter.current();
 
@@ -202,14 +247,14 @@ void detect_in_out_sets(StmtList& stmts, bool removingUnusedVar = false) {
 								if (param == prevDef.lhs()) {
 									// Function parameter defined before, but we cannot propagate to parameters,
 									// therefore we keep it in a temp set and remove it later.
-									invalidDefsByFunctionParam.ins(prevDef);
+									invalidDefs.ins(prevDef);
 									break;
 								}
 							}
 						}
 					}
 
-					constPropWS->inSet -= invalidDefsByFunctionParam;
+					constPropWS->inSet -= invalidDefs;
 				}
 			}
 
@@ -282,27 +327,7 @@ void replace_inset_symbols(StmtList& stmts, bool& hasChange) {
 void simplify_const_expressions(StmtList& stmts, bool& hasChange) {
 	for (Iterator<Statement> iter = stmts; iter.valid(); ++iter) {
 		Statement& stmt = iter.current();
-
-		for (Mutator<Expression> exprIter = stmt.iterate_in_exprs_guarded();
-			exprIter.valid();
-			++exprIter) {
-			Expression& expr = exprIter.current();
-
-			Expression* simplifiedExpr = simplify(expr.clone());
-
-			if (!(expr == *simplifiedExpr)) {
-				switch (simplifiedExpr->op()) {
-				case INTEGER_CONSTANT_OP:
-				case REAL_CONSTANT_OP:
-				case STRING_CONSTANT_OP:
-				case LOGICAL_CONSTANT_OP:
-				case COMMA_OP:
-					exprIter.assign() = simplifiedExpr->clone();
-					hasChange = true;
-					break;
-				}
-			}
-		}
+		stmt.simplify_expressions();
 	}
 }
 
@@ -497,6 +522,11 @@ void remove_unused_variables(StmtList& stmts, bool& hasChange) {
 		Expression& lhsExpr = stmt.lhs();
 
 		if (lhsExpr.op() == ARRAY_REF_OP) {
+			continue;
+		}
+
+		// Assignment to formal parameters should not be removed, as Fortran uses pass-by-reference
+		if (lhsExpr.symbol().formal()) {
 			continue;
 		}
 
