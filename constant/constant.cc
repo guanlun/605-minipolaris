@@ -150,7 +150,25 @@ void replace_const_param_symbols(ProgramUnit& pgm) {
 	}
 }
 
-void detect_in_out_sets(StmtList& stmts, bool removingUnusedVar = false) {
+RefSet<Symbol> find_non_constant_symbols(ProgramUnit& pgm) {
+	RefSet<Symbol> nonConstantSymbols;
+
+	for (DictionaryIter<Symbol> symIter = pgm.symtab().iterator(); symIter.valid(); ++symIter) {
+		Symbol& symbol = symIter.current();
+
+		if ((symbol.equivalence_ref() != NULL) ||
+			symbol.saved() ||
+			(symbol.sym_class() == BLOCK_DATA_CLASS)) {
+			nonConstantSymbols.ins(symbol);
+		}
+	}
+
+	return nonConstantSymbols;
+}
+
+void detect_in_out_sets(ProgramUnit& pgm, RefSet<Symbol>& nonConstantSymbols, bool removingUnusedVar = false) {
+	StmtList& stmts = pgm.stmts();
+
 	bool changed = true;
 	int iterCount = 0;
 
@@ -194,7 +212,6 @@ void detect_in_out_sets(StmtList& stmts, bool removingUnusedVar = false) {
 						if (predStmtIdx == 0) {
 							constPropWS->inSet = predConstPropWS->outSet;
 						} else {
-							cout << "intersect  " << constPropWS->inSet << endl;
 							stmt_set_intersection(constPropWS->inSet, predConstPropWS->outSet);
 						}
 					}
@@ -261,7 +278,15 @@ void detect_in_out_sets(StmtList& stmts, bool removingUnusedVar = false) {
 			resultSet += constPropWS->inSet;
 
 			if (stmt.stmt_class() == ASSIGNMENT_STMT) {
-				genSet.ins(stmt);
+				Expression& lhsExpr = stmt.lhs();
+				OP_TYPE opType = lhsExpr.op();
+				if ((opType == ID_OP) || (opType == ARRAY_REF_OP)) {
+					Symbol& assignedSymbol = *stmt.lhs().base_variable_ref();
+
+					if (!nonConstantSymbols.member(assignedSymbol)) {
+						genSet.ins(stmt);
+					}
+				}
 
 				for (Iterator<Statement> defIter = resultSet; defIter.valid(); ++defIter) {
 					Statement& prevDef = defIter.current();
@@ -304,6 +329,10 @@ void replace_inset_symbols(StmtList& stmts, bool& hasChange) {
 
 				if (expr.op() == DELETED_EXPRESSION_OP) {
 					break;
+				}
+
+				if (expr.op() != ID_OP) {
+					cout << "NOT ID OP!!!!!!!!!!!!!!!!!!!!!!!!!!!!   " << expr << endl;
 				}
 
 				switch (def.rhs().op()) {
@@ -566,17 +595,22 @@ void propagate_constants(ProgramUnit & pgm) {
 
 	do {
 		hasChange = false;
-		detect_in_out_sets(stmts);
+		RefSet<Symbol> nonConstantSymbols = find_non_constant_symbols(pgm);
+		detect_in_out_sets(pgm, nonConstantSymbols);
 		replace_inset_symbols(stmts, hasChange);
 		simplify_const_expressions(stmts, hasChange);
 		remove_dead_branches(stmts, hasChange);
 		clean_workspace(stmts);
 	} while (hasChange);
 
-	do {
-		hasChange = false;
-		detect_in_out_sets(stmts, true);
-		remove_unused_variables(stmts, hasChange);
-		clean_workspace(stmts);
-	} while (hasChange);
+	RefSet<Symbol> nonConstantSymbols = find_non_constant_symbols(pgm);
+	if (nonConstantSymbols.empty()) {
+		// Playing safe here: do not remove unused variables when non constant symbols exist
+		do {
+			hasChange = false;
+			detect_in_out_sets(pgm, nonConstantSymbols, true);
+			remove_unused_variables(stmts, hasChange);
+			clean_workspace(stmts);
+		} while (hasChange);
+	}
 };
