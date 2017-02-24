@@ -293,7 +293,7 @@ void detect_in_out_sets(ProgramUnit& pgm, RefSet<Symbol>& nonConstantSymbols, bo
 
 					if (stmt.lhs() == prevDef.lhs()) {
 						resultSet.del(prevDef);
-					} else if (expr_in_expr(&stmt.lhs(), &prevDef.rhs())) {
+					} else if (!removingUnusedVar && expr_in_expr(&stmt.lhs(), &prevDef.rhs())) {
 						resultSet.del(prevDef);
 					}
 				}
@@ -329,10 +329,6 @@ void replace_inset_symbols(StmtList& stmts, bool& hasChange) {
 
 				if (expr.op() == DELETED_EXPRESSION_OP) {
 					break;
-				}
-
-				if (expr.op() != ID_OP) {
-					cout << "NOT ID OP!!!!!!!!!!!!!!!!!!!!!!!!!!!!   " << expr << endl;
 				}
 
 				switch (def.rhs().op()) {
@@ -514,6 +510,19 @@ void remove_dead_branches(StmtList& stmts, bool& hasChange) {
 			}
 
 			// Delete the entire if-elseif-else branch by deleting the "if" statement
+			stmts.del(stmt);
+		}
+	}
+
+	iter = stmts.stmts_of_type(WHILE_STMT);
+
+	for (; iter.valid(); ++iter) {
+		Statement& stmt = iter.current();
+
+		Expression& predicate = stmt.expr();
+
+		if ((predicate.op() == LOGICAL_CONSTANT_OP) && (predicate.str_data() == ".FALSE.")) {
+			stmts.del(*stmt.next_ref(), *stmt.follow_ref()->prev_ref());
 			stmts.del(stmt);
 		}
 	}
