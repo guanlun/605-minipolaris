@@ -35,15 +35,15 @@ p_bblocks    2	print after basic blocks pass (1 == Fortran form, 2 == all fields
 
 # Project 2
 
-ssa          0  transform into SSA form (0=dont,1=do)
+ssa          1  transform into SSA form (0=dont,1=do)
 p_ssa        1  print after SSA pass (0=dont, 1=do)
-dessa        0  revert from SSA form (0=dont,1=do)
+dessa        1  revert from SSA form (0=dont,1=do)
 p_dessa      1  print after deSSA pass (0=dont, 1=FORTRAN,2=detailed)
 
 # Project 3
 
-constprop          1  performs constant propagation, live variable analysis, deadcode elimination (0=dont,1=do)
-p_constprop        2  print after constant propagation pass (0=dont, 1=do)
+constprop          0  performs constant propagation, live variable analysis, deadcode elimination (0=dont,1=do)
+p_constprop        0  print after constant propagation pass (0=dont, 1=do)
 
 
 
@@ -54,7 +54,7 @@ pass_trace   1  Announce each pass
 wide_output  1  write line numbers and loop nests (0=False, 1=True)
 wide_space   2  indentation for the loop nest display
 comments     0  pass through all comments as directives (0=False, 1=True)
-burst_page   1  generate a burst page which dumps the switches database.
+burst_page   0  generate a burst page which dumps the switches database.
 burst_header 0  generate a burst header before each compilation unit.
 output_size  1  output type size if it matches default (0=False, 1=True)
 lower_case   1  convert id's to lowercase on output (0=False,1=True)

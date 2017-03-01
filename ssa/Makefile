@@ -4,7 +4,7 @@ PACKAGE = ssa
 
 CPPSRCS = ssa.cc 
 
-CPPHDRS = ssa.h 
+CPPHDRS = ssa.h SSAWorkSpace.h
 
 OTHERSRCS = Makefile 
 
