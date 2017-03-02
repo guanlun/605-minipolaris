@@ -5,15 +5,16 @@
 
 class SSAWorkSpace : public WorkSpace {
 public:
-	SSAWorkSpace(int pass_tag) : WorkSpace(pass_tag) {}
+	SSAWorkSpace(int pass_tag) : WorkSpace(pass_tag) {
+	}
 
 	Listable *listable_clone() const { return NULL; };
 
-	INLINE void print(ostream &o) const { o << ""; }
+	INLINE void print(ostream &o) const { o << dominators.size(); }
 
 	INLINE int structures_OK() const { return 1; };
 
-
+	set<Statement*> dominators;
 };
 
 #endif
