@@ -4,6 +4,7 @@
         j = i
         if ( j .EQ. i) then
            j = 3
+           i = 4
         else
            j = 7
         endif

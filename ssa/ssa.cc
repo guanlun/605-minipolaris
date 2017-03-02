@@ -11,7 +11,7 @@
 
 int PASS_TAG = 3;
 
-void per_stmt_operation(StmtList& stmts, void (*forEachFunction)(Statement&)) {
+void per_stmt_operation(Iterator<Statement> stmts, void (*forEachFunction)(Statement&)) {
 	for (Iterator<Statement> stmtIter = stmts; stmtIter.valid(); ++stmtIter) {
 		Statement& stmt = stmtIter.current();
 		forEachFunction(stmt);
@@ -32,6 +32,33 @@ void set_intersect(set<T>& s1, set<T>& s2) {
 		if (s2.count(*it) == 0) {
 			s1.erase(it);
 		}
+	}
+}
+
+template <class T>
+bool set_equal(set<T>& s1, set<T>& s2) {
+	if (s1.size() != s2.size()) {
+		return false;
+	}
+
+	for (typename set<T>::iterator it = s1.begin(); it != s1.end(); ++it) {
+		if (s2.count(*it) == 0) {
+			return false;
+		}
+	}
+
+	return true;
+}
+
+void link_dominants(Statement& stmt) {
+	SSAWorkSpace* ws = get_ssa_ws(stmt);
+	for (set<Statement*>::iterator it = ws->dominators.begin();
+		it != ws->dominators.end();
+		++it) {
+		Statement* dominatorStmt = *it;
+
+		SSAWorkSpace* dominatorWorkSpace = get_ssa_ws(*dominatorStmt);
+		dominatorWorkSpace->dominants.insert(&stmt);
 	}
 }
 
@@ -77,19 +104,30 @@ void find_dominance_frontier(Statement& stmt) {
 	}
 }
 
-template <class T>
-bool set_equal(set<T>& s1, set<T>& s2) {
-	if (s1.size() != s2.size()) {
-		return false;
-	}
+void find_phi_insertion_points(Statement& stmt) {
+	Expression& assignedExpr = stmt.lhs();
+	Symbol& assignedSymbol = assignedExpr.symbol();
 
-	for (typename set<T>::iterator it = s1.begin(); it != s1.end(); ++it) {
-		if (s2.count(*it) == 0) {
-			return false;
-		}
-	}
+	SSAWorkSpace* ws = get_ssa_ws(stmt);
 
-	return true;
+	for (set<Statement*>::iterator dfIter = ws->dominanceFrontiers.begin();
+		dfIter != ws->dominanceFrontiers.end();
+		++dfIter) {
+		Statement* dfStmt = *dfIter;
+		SSAWorkSpace* dfWorkSpace = get_ssa_ws(*dfStmt);
+
+		dfWorkSpace->phiSymbols.insert(&assignedSymbol);
+	}
+}
+
+void insert_phi_stmts(Statement& stmt) {
+	SSAWorkSpace* ws = get_ssa_ws(stmt);
+
+	for (set<Symbol*>::iterator phiIter = ws->phiSymbols.begin();
+		phiIter != ws->phiSymbols.end();
+		++phiIter) {
+
+	}
 }
 
 void compute_dominance(ProgramUnit& pgm) {
@@ -142,14 +180,27 @@ void compute_dominance(ProgramUnit& pgm) {
 		}
 	}
 
+	per_stmt_operation(stmts, link_dominants);
 	per_stmt_operation(stmts, find_immediate_dominator);
-
 	per_stmt_operation(stmts, find_dominance_frontier);
+}
+
+void generate_phi_stmts(ProgramUnit& pgm) {
+	StmtList& stmts = pgm.stmts();
+
+	per_stmt_operation(stmts.stmts_of_type(ASSIGNMENT_STMT), find_phi_insertion_points);
+	per_stmt_operation(stmts, insert_phi_stmts);
+}
+
+void rename_variables(ProgramUnit& pgm) {
+	StmtList& stmts = pgm.stmts();
 }
 
 void ssa(ProgramUnit & pgm)
 {
 	compute_dominance(pgm);
+	generate_phi_stmts(pgm);
+	rename_variables(pgm);
 }
 
 void dessa(ProgramUnit & pgm)
