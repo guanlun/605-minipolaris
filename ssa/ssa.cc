@@ -8,6 +8,8 @@
 #include "Statement/Statement.h"
 
 #include <queue>
+#include <vector>
+#include <map>
 
 int PASS_TAG = 3;
 
@@ -105,6 +107,7 @@ void find_dominance_frontier(Statement& stmt) {
 }
 
 void find_phi_insertion_points(Statement& stmt) {
+	// TODO: maybe change this to out_refs?
 	Expression& assignedExpr = stmt.lhs();
 	Symbol& assignedSymbol = assignedExpr.symbol();
 
@@ -192,8 +195,73 @@ void generate_phi_stmts(ProgramUnit& pgm) {
 	per_stmt_operation(stmts, insert_phi_stmts);
 }
 
+void variable_renaming_helper(Statement* stmt, map<Symbol*, vector<int> >& variableNumLookup, set<Statement*>& visited) {
+	if (visited.count(stmt) > 0) {
+		return;
+	}
+
+	cout << "visiting: " << stmt->tag() << " " << stmt << endl;
+
+	SSAWorkSpace* ws = get_ssa_ws(*stmt);
+
+	for (Iterator<Expression> inRefIter = stmt->in_refs(); inRefIter.valid(); ++inRefIter) {
+		Expression& inRefExpr = inRefIter.current();
+
+		if (inRefExpr.op() != ID_OP) {
+			continue;
+		}
+
+		Symbol& inRefSymbol = inRefExpr.symbol();
+		map<Symbol*, vector<int> >::iterator vnIter = variableNumLookup.find(&inRefSymbol);
+	}
+
+	// Look at the new definitions and rename any redefined variables
+	for (Iterator<Expression> outRefIter = stmt->out_refs(); outRefIter.valid(); ++outRefIter) {
+		Expression& outRefExpr = outRefIter.current();
+
+		if (outRefExpr.op() != ID_OP) {
+			continue;
+		}
+
+		Symbol& outRefSymbol = outRefExpr.symbol();
+		map<Symbol*, vector<int> >::iterator vnIter = variableNumLookup.find(&outRefSymbol);
+
+		vector<int>& numStack = vnIter->second;
+		numStack.push_back(numStack.back() + 1);
+	}
+
+	visited.insert(stmt);
+
+	// Recursively visit all the dominants
+	for (set<Statement*>::iterator dominantIter = ws->dominants.begin();
+		dominantIter != ws->dominants.end();
+		++dominantIter) {
+
+		Statement* dominantStmt = *dominantIter;
+		if (dominantStmt == stmt) {
+			continue;
+		}
+
+		variable_renaming_helper(dominantStmt, variableNumLookup, visited);
+	}
+}
+
 void rename_variables(ProgramUnit& pgm) {
-	StmtList& stmts = pgm.stmts();
+	StmtList& assignmentStmts = pgm.stmts();
+
+	set<Statement*> visitedStmts;
+	map<Symbol*, vector<int> > variableNumLookup;
+
+	for (DictionaryIter<Symbol> symIter = pgm.symtab().iterator(); symIter.valid(); ++symIter) {
+		Symbol& symbol = symIter.current();
+
+		vector<int> numStack;
+		numStack.push_back(1);
+
+		variableNumLookup.insert(pair<Symbol*, vector<int> >(&symbol, numStack));
+	}
+
+	variable_renaming_helper(&assignmentStmts[0], variableNumLookup, visitedStmts);
 }
 
 void ssa(ProgramUnit & pgm)
