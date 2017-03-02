@@ -23,9 +23,38 @@ void create_workspace(Statement& stmt) {
 	stmt.work_stack().push(new SSAWorkSpace(PASS_TAG));
 }
 
+inline SSAWorkSpace* get_ssa_ws(Statement& stmt) {
+	return (SSAWorkSpace*)stmt.work_stack().top_ref(PASS_TAG);
+}
+
 template <class T>
 void set_intersect(set<T>& s1, set<T>& s2) {
+	for (typename set<T>::iterator it = s1.begin(); it != s1.end(); ++it) {
+		if (s2.count(*it) == 0) {
+			s1.erase(it);
+		}
+	}
+}
 
+void find_immediate_dominator(Statement& stmt) {
+	SSAWorkSpace* ws = get_ssa_ws(stmt);
+	Statement* runner = &stmt;
+
+	while (runner != NULL) {
+		const RefSet<Statement>& predStmts = runner->pred();
+		if (predStmts.empty()) {
+			break;
+		}
+
+		Iterator<Statement> firstPredIter = predStmts;
+		runner = &firstPredIter.current();
+
+		if (ws->dominators.count(runner) > 0) {
+			break;
+		}
+	}
+
+	ws->immediateDominator = runner;
 }
 
 template <class T>
@@ -61,11 +90,11 @@ void compute_dominance(ProgramUnit& pgm) {
 	workList.push(&stmts[0]);
 
 	while (!workList.empty()) {
-		Statement* currNode = workList.back();
+		Statement* currNode = workList.front();
 		set<Statement*> currDominators = ((SSAWorkSpace*)currNode->work_stack().top_ref(PASS_TAG))->dominators;
 		workList.pop();
 
-		cout << "work list is not empty" << endl;
+		cout << "Working on: " << currNode->tag() << endl;
 
 		set<Statement*> newDominators;
 
@@ -90,10 +119,13 @@ void compute_dominance(ProgramUnit& pgm) {
 			for (Iterator<Statement> succIter = currNode->succ(); succIter.valid(); ++succIter) {
 				Statement& succStmt = succIter.current();
 
+				cout << "Adding: " << succStmt.tag() << endl;
 				workList.push(&succStmt);
 			}
 		}
 	}
+
+	per_stmt_operation(stmts, find_immediate_dominator);
 }
 
 void ssa(ProgramUnit & pgm)
