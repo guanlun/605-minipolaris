@@ -19,7 +19,6 @@ void per_stmt_operation(StmtList& stmts, void (*forEachFunction)(Statement&)) {
 }
 
 void create_workspace(Statement& stmt) {
-	cout << "creating workspace" << endl;
 	stmt.work_stack().push(new SSAWorkSpace(PASS_TAG));
 }
 
@@ -55,6 +54,27 @@ void find_immediate_dominator(Statement& stmt) {
 	}
 
 	ws->immediateDominator = runner;
+}
+
+void find_dominance_frontier(Statement& stmt) {
+	SSAWorkSpace* ws = get_ssa_ws(stmt);
+	const RefSet<Statement>& predStmts = stmt.pred();
+
+	if (predStmts.entries() >= 2) {
+		// Only a merge-point could be a dominance frontier of other nodes
+		for (Iterator<Statement> predIter = predStmts; predIter.valid(); ++predIter) {
+			Statement& predStmt = predIter.current();
+
+			Statement* runner = &predStmt;
+
+			while (runner != ws->immediateDominator) {
+				SSAWorkSpace* runnerWS = get_ssa_ws(*runner);
+				runnerWS->dominanceFrontiers.insert(&stmt);
+
+				runner = runnerWS->immediateDominator;
+			}
+		}
+	}
 }
 
 template <class T>
@@ -94,8 +114,6 @@ void compute_dominance(ProgramUnit& pgm) {
 		set<Statement*> currDominators = ((SSAWorkSpace*)currNode->work_stack().top_ref(PASS_TAG))->dominators;
 		workList.pop();
 
-		cout << "Working on: " << currNode->tag() << endl;
-
 		set<Statement*> newDominators;
 
 		int predIdx = 0;
@@ -119,13 +137,14 @@ void compute_dominance(ProgramUnit& pgm) {
 			for (Iterator<Statement> succIter = currNode->succ(); succIter.valid(); ++succIter) {
 				Statement& succStmt = succIter.current();
 
-				cout << "Adding: " << succStmt.tag() << endl;
 				workList.push(&succStmt);
 			}
 		}
 	}
 
 	per_stmt_operation(stmts, find_immediate_dominator);
+
+	per_stmt_operation(stmts, find_dominance_frontier);
 }
 
 void ssa(ProgramUnit & pgm)

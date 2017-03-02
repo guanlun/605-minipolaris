@@ -11,17 +11,18 @@ public:
 	Listable *listable_clone() const { return NULL; };
 
 	INLINE void print(ostream &o) const {
-		o << immediateDominator->tag();
-//		o << dominators.size() << " items: ";
-//		for (set<Statement*>::iterator it = dominators.begin(); it != dominators.end(); ++it) {
-//			o << (*it)->tag() << " ";
-//		}
+		o << "idom: " << immediateDominator->tag() << " ";
+		o << dominanceFrontiers.size() << " items: ";
+		for (set<Statement*>::iterator it = dominanceFrontiers.begin(); it != dominanceFrontiers.end(); ++it) {
+			o << (*it)->tag() << " ";
+		}
 	}
 
 	INLINE int structures_OK() const { return 1; };
 
 	set<Statement*> dominators;
 	Statement* immediateDominator;
+	set<Statement*> dominanceFrontiers;
 };
 
 #endif
