@@ -191,7 +191,41 @@ void compute_dominance(ProgramUnit& pgm) {
 void generate_phi_stmts(ProgramUnit& pgm) {
 	StmtList& stmts = pgm.stmts();
 
-	per_stmt_operation(stmts.stmts_of_type(ASSIGNMENT_STMT), find_phi_insertion_points);
+//	per_stmt_operation(stmts.stmts_of_type(ASSIGNMENT_STMT), find_phi_insertion_points);
+
+	for (DictionaryIter<Symbol> symIter = pgm.symtab().iterator(); symIter.valid(); ++symIter) {
+		Symbol& sym = symIter.current();
+		set<Statement*> workList;
+
+		for (Iterator<Statement> stmtIter = stmts.stmts_of_type(ASSIGNMENT_STMT); stmtIter.valid(); ++stmtIter) {
+			Statement& stmt = stmtIter.current();
+
+			Symbol& assignee = stmt.lhs().symbol();
+
+			if (&assignee == &sym) {
+				workList.insert(&stmt);
+			}
+		}
+
+		while (!workList.empty()) {
+			Statement* currNode = *workList.begin();
+			workList.erase(currNode);
+
+			set<Statement*> dfNodes = ((SSAWorkSpace*)currNode->work_stack().top_ref(PASS_TAG))->dominanceFrontiers;
+
+			for (set<Statement*>::iterator dfIter = dfNodes.begin(); dfIter != dfNodes.end(); ++dfIter) {
+				Statement* dfNode = *dfIter;
+
+				SSAWorkSpace* dfNodeWS = get_ssa_ws(*dfNode);
+
+				dfNodeWS->phiSymbols.insert(&sym);
+				workList.insert(dfNode);
+
+//				cout << sym.tag_ref() << " is added to " << dfNode->tag() << endl;
+			}
+		}
+	}
+
 	per_stmt_operation(stmts, insert_phi_stmts);
 }
 
