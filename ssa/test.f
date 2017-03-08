@@ -1,15 +1,15 @@
-        PROGRAM TEST19
-        INTEGER*4 i,j,k
-        i = 4
-        j = i
-        if ( j .EQ. i) then
-           j = 3
-           i = 4
-        else
-           j = 7
-        endif
+        PROGRAM TEST15
+        INTEGER*4 i,j,k,l
         
-        k = i 
-        print *, k,j
+        k = 4
+        IF ( j .EQ. i) THEN
+          DO i=1,10,1
+            k = 5
+            print *,i
+          ENDDO
+          print *,j
+        ENDIF
+        PRINT *, j,i
         STOP
         END
+

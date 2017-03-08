@@ -17,10 +17,10 @@ public:
 //			o << (*it)->tag() << " ";
 //		}
 
-		o << dominants.size() << " dominants: ";
-		for (set<Statement*>::iterator it = dominants.begin(); it != dominants.end(); ++it) {
-			o << (*it)->tag() << " ";
-		}
+//		o << dominants.size() << " dominants: ";
+//		for (set<Statement*>::iterator it = dominants.begin(); it != dominants.end(); ++it) {
+//			o << (*it)->tag() << " ";
+//		}
 
 		for (set<Symbol*>::iterator it = phiSymbols.begin(); it != phiSymbols.end(); ++it) {
 			o << (*it)->name_ref() << " ";

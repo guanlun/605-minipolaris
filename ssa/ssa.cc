@@ -6,6 +6,11 @@
 #include "StmtList.h"
 #include "Collection/List.h"
 #include "Statement/Statement.h"
+#include "Statement/AssignmentStmt.h"
+#include "Expression/FunctionCallExpr.h"
+#include "Expression/IDExpr.h"
+#include "../bblock/BasicBlock.h"
+#include "Expression/expr_funcs.h"
 
 #include <queue>
 #include <vector>
@@ -54,6 +59,17 @@ bool set_equal(set<T>& s1, set<T>& s2) {
 
 void link_dominants(Statement& stmt) {
 	SSAWorkSpace* ws = get_ssa_ws(stmt);
+	Statement* idomStmt = ws->immediateDominator;
+
+	if (!idomStmt) {
+		return;
+	}
+
+	SSAWorkSpace* idomWS = get_ssa_ws(*idomStmt);
+
+	idomWS->dominants.insert(&stmt);
+
+	/*
 	for (set<Statement*>::iterator it = ws->dominators.begin();
 		it != ws->dominators.end();
 		++it) {
@@ -62,6 +78,7 @@ void link_dominants(Statement& stmt) {
 		SSAWorkSpace* dominatorWorkSpace = get_ssa_ws(*dominatorStmt);
 		dominatorWorkSpace->dominants.insert(&stmt);
 	}
+	*/
 }
 
 void find_immediate_dominator(Statement& stmt) {
@@ -108,8 +125,10 @@ void find_dominance_frontier(Statement& stmt) {
 
 void find_phi_insertion_points(Statement& stmt) {
 	// TODO: maybe change this to out_refs?
-	Expression& assignedExpr = stmt.lhs();
-	Symbol& assignedSymbol = assignedExpr.symbol();
+//	Expression& assignedExpr = stmt.lhs();
+	Iterator<Expression> outIter = stmt.out_refs();
+	Expression& outExpr = outIter.current();
+	Symbol& assignedSymbol = outExpr.symbol();
 
 	SSAWorkSpace* ws = get_ssa_ws(stmt);
 
@@ -130,6 +149,9 @@ void insert_phi_stmts(Statement& stmt) {
 		phiIter != ws->phiSymbols.end();
 		++phiIter) {
 
+//		new_function("PHI", make_type(REAL_TYPE, 8), pgm);
+//		FunctionCallExpr* phiExpr = new FunctionCallExpr();
+//		Statement* phiFunctionStmt = new
 	}
 }
 
@@ -196,11 +218,18 @@ void generate_phi_stmts(ProgramUnit& pgm) {
 	for (DictionaryIter<Symbol> symIter = pgm.symtab().iterator(); symIter.valid(); ++symIter) {
 		Symbol& sym = symIter.current();
 		set<Statement*> workList;
+		set<Statement*> added;
 
-		for (Iterator<Statement> stmtIter = stmts.stmts_of_type(ASSIGNMENT_STMT); stmtIter.valid(); ++stmtIter) {
+		for (Iterator<Statement> stmtIter = stmts; stmtIter.valid(); ++stmtIter) {
 			Statement& stmt = stmtIter.current();
 
-			Symbol& assignee = stmt.lhs().symbol();
+			Iterator<Expression> outIter = stmt.out_refs();
+			if (!outIter.valid()) {
+				continue;
+			}
+
+			Expression& outExpr = outIter.current();
+			Symbol& assignee = outExpr.symbol();
 
 			if (&assignee == &sym) {
 				workList.insert(&stmt);
@@ -219,14 +248,42 @@ void generate_phi_stmts(ProgramUnit& pgm) {
 				SSAWorkSpace* dfNodeWS = get_ssa_ws(*dfNode);
 
 				dfNodeWS->phiSymbols.insert(&sym);
-				workList.insert(dfNode);
 
-//				cout << sym.tag_ref() << " is added to " << dfNode->tag() << endl;
+				if (added.count(dfNode) == 0) {
+					workList.insert(dfNode);
+					added.insert(dfNode);
+				}
+
+				cout << sym.tag_ref() << " is added to " << dfNode->tag() << endl;
 			}
 		}
 	}
 
-	per_stmt_operation(stmts, insert_phi_stmts);
+	Expression* phiFunc = new_function("PHI", make_type(REAL_TYPE, 8), pgm);
+
+//	per_stmt_operation(stmts, insert_phi_stmts);
+	for (Iterator<Statement> stmtIter = stmts; stmtIter.valid(); ++stmtIter) {
+		cout << "still iterating" << endl;
+		Statement& stmt = stmtIter.current();
+		cout << stmt << endl;
+
+		SSAWorkSpace* ws = get_ssa_ws(stmt);
+
+		for (set<Symbol*>::iterator phiIter = ws->phiSymbols.begin();
+			phiIter != ws->phiSymbols.end();
+			++phiIter) {
+			Symbol* phiSymbol = *phiIter;
+
+			Expression* args = comma();
+			Expression* phiFuncExpr = function_call(phiFunc->clone(), args);
+			Expression* assignedExpr = new IDExpr(phiSymbol->type(), *phiSymbol);
+
+			Statement* phiStmt = new AssignmentStmt(stmts.new_tag(), assignedExpr, phiFuncExpr);
+			create_workspace(*phiStmt);
+
+			stmts.ins_after(phiStmt, &stmt);
+		}
+	}
 }
 
 void variable_renaming_helper(Statement* stmt, map<Symbol*, vector<int> >& variableNumLookup, set<Statement*>& visited) {

@@ -28,7 +28,7 @@ p_congoto     2	print after convert gotos pass (1 == Fortran form, 2 == all fiel
 
 # Project 1b
 
-basic_blocks 0	Find the basic blocks 
+basic_blocks 1	Find the basic blocks 
 bb_mark      1  Annotate basic blocks
 p_bbsummary  1	Print a summary of basic blocks for each program unit
 p_bblocks    2	print after basic blocks pass (1 == Fortran form, 2 == all fields)
