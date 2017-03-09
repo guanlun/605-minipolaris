@@ -241,6 +241,15 @@ void generate_phi_stmts(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {
              ++phiIter) {
             Symbol* phiSymbol = *phiIter;
 
+            /*
+            // Create placeholder argument list using constants
+            int predCount = bb.predecessors.entries();
+            List<Expression>* argList = new List<Expression>();
+            for (int predIdx = 0; predIdx < predCount; predIdx++) {
+                argList->ins_last(constant(0));
+            }
+            */
+
             Expression* args = comma();
             Expression* phiFuncExpr = function_call(phiFunc->clone(), args);
             Expression* assignedExpr = new IDExpr(phiSymbol->type(), *phiSymbol);
@@ -303,6 +312,9 @@ void populate_phi_args(Statement& phiStmt, map<Symbol*, vector<int> >& variableN
     Expression& lhs = phiStmt.lhs();
     Symbol& phiSymbol = lhs.symbol();
 
+    Expression& phiFunc = phiStmt.rhs();
+    Expression& phiParams = phiFunc.parameters_guarded();
+
     char* origName = orig_symbol_name(phiSymbol);
 
     for (map<Symbol*, vector<int> >::iterator mapIter = variableNumLookup.begin();
@@ -310,10 +322,26 @@ void populate_phi_args(Statement& phiStmt, map<Symbol*, vector<int> >& variableN
          ++mapIter) {
         Symbol* key = mapIter->first;
 
-        cout << "in map: " << key->name_ref() << endl;
+        if (strcmp(orig_symbol_name(*key), origName) == 0) {
+            const char* phiArgName = current_name(key, variableNumLookup);
+            Symbol* phiArgSymbol = key->clone();
+            phiArgSymbol->name(phiArgName);
 
-        if (strcmp(key->name_ref(), origName) == 0) {
+            Expression* argExpr = new IDExpr(phiArgSymbol->type(), *phiArgSymbol);
+            phiParams.arg_list().ins_last(argExpr);
 
+            /*
+            for (Mutator<Expression> argIter = phiArgs; argIter.valid(); ++argIter) {
+                Expression& argExpr = argIter.current();
+                cout << "arg: " << argExpr << endl;
+
+                if (argExpr.op() == INTEGER_CONSTANT_OP) {
+                    cout << "is constant!!!!!!!!!!!!!!!!!!" << endl;
+                    argIter.assign() = constant(1);
+                    break;
+                }
+            }
+            */
         }
     }
 }
