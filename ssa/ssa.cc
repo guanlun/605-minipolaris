@@ -10,6 +10,7 @@
 #include "Expression/FunctionCallExpr.h"
 #include "Expression/IDExpr.h"
 #include "Expression/expr_funcs.h"
+#include "Symbol/VariableSymbol.h"
 
 #include <sstream>
 #include <queue>
@@ -324,7 +325,22 @@ const char* new_name(Symbol* sym, map<Symbol*, vector<int> >& variableNumLookup,
     return ss.str().c_str();
 }
 
+Expression* replace_symbol(Expression* expr, Symbol* oldSymbol, Expression* newExpr) {
+    if (expr->op() == ID_OP) {
+        if (&expr->symbol() == oldSymbol) {
+            return newExpr->clone();
+        }
+    } else {
+        for (Mutator<Expression> exprMut = expr->arg_list(); exprMut.valid(); ++exprMut) {
+            exprMut.assign() = replace_symbol(exprMut.pull(), oldSymbol, newExpr);
+        }
+    }
+
+    return expr;
+}
+
 void variable_renaming_helper(
+        ProgramUnit& pgm,
         BasicBlock* bb,
         map<Symbol*, vector<int> >& variableNumLookup,
         map<Symbol*, int>& counter,
@@ -339,25 +355,34 @@ void variable_renaming_helper(
         cout << "    ";
     }
 
-    cout << "Now visited bb: " << bb->name << endl;
+    cout << "Now visited bb: " << bb->name << ": ";
 
     visited.insert(bb);
+
+    for (int stmtIdx = 0; stmtIdx < bb->stmts.entries(); stmtIdx++) {
+        Statement& stmt = bb->stmts[stmtIdx];
+
+        if (is_phi_stmt(stmt)) {
+            cout << "IS PHI STMT: " << stmt.tag() << endl;
+            for (Mutator<Expression> outRefMut = stmt.out_refs(); outRefMut.valid(); ++outRefMut) {
+                Expression& outRefExpr = outRefMut.current();
+
+                Symbol& assignedSymbol = outRefExpr.symbol();
+                const char* newVarName = new_name(&assignedSymbol, variableNumLookup, counter);
+
+                Symbol* renamedSymbol = assignedSymbol.clone();
+                renamedSymbol->name(newVarName);
+
+                outRefExpr.symbol(*renamedSymbol);
+            }
+        }
+    }
 
     for (set<BasicBlock*>::iterator domIter = bb->dominants.begin();
          domIter != bb->dominants.end();
          ++domIter) {
         BasicBlock* dominantBB = *domIter;
-
-        for (int stmtIdx = 0; stmtIdx < bb->stmts.entries(); stmtIdx++) {
-            Statement& stmt = bb->stmts[stmtIdx];
-
-            if (is_phi_stmt(stmt)) {
-                const char* newVarName = new_name(&stmt.lhs().symbol(), variableNumLookup, counter);
-                cout << newVarName << endl;
-            }
-        }
-
-        variable_renaming_helper(dominantBB, variableNumLookup, counter, visited, depth + 1);
+        variable_renaming_helper(pgm, dominantBB, variableNumLookup, counter, visited, depth + 1);
     }
 }
 
@@ -378,7 +403,7 @@ void rename_variables(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {
 
     Iterator<BasicBlock> startIter = *basicBlocks;
 
-    variable_renaming_helper(&startIter.current(), variableNumLookup, counter, visited);
+    variable_renaming_helper(pgm, &startIter.current(), variableNumLookup, counter, visited);
 }
 
 void ssa(ProgramUnit & pgm, List<BasicBlock>* basicBlocks)
