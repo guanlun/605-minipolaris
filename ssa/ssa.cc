@@ -9,7 +9,6 @@
 #include "Statement/AssignmentStmt.h"
 #include "Expression/FunctionCallExpr.h"
 #include "Expression/IDExpr.h"
-#include "../bblock/BasicBlock.h"
 #include "Expression/expr_funcs.h"
 
 #include <queue>
@@ -155,59 +154,105 @@ void insert_phi_stmts(Statement& stmt) {
 	}
 }
 
-void compute_dominance(ProgramUnit& pgm) {
-	StmtList& stmts = pgm.stmts();
-	per_stmt_operation(stmts, create_workspace);
+void compute_dominance(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {
+	for (Iterator<BasicBlock> bbIter = *basicBlocks; bbIter.valid(); ++bbIter) {
+		BasicBlock& bb = bbIter.current();
 
-	for (Iterator<Statement> stmtIter = stmts; stmtIter.valid(); ++stmtIter) {
-		Statement& stmt = stmtIter.current();
-		SSAWorkSpace* ssaWS = (SSAWorkSpace*)stmt.work_stack().top_ref(PASS_TAG);
+		for (Iterator<BasicBlock> domIter = *basicBlocks; domIter.valid(); ++domIter) {
+			BasicBlock& initBB = domIter.current();
 
-		for (Iterator<Statement> domIter = stmts; domIter.valid(); ++domIter) {
-			Statement& initDominator = domIter.current();
-			ssaWS->dominators.insert(&initDominator);
+			bb.dominators.insert(&initBB);
 		}
 	}
 
-	queue<Statement*> workList;
-	workList.push(&stmts[0]);
+	queue<BasicBlock*> workList;
+	workList.push(basicBlocks->first_ref());
 
 	while (!workList.empty()) {
-		Statement* currNode = workList.front();
-		set<Statement*> currDominators = ((SSAWorkSpace*)currNode->work_stack().top_ref(PASS_TAG))->dominators;
+		BasicBlock* currNode = workList.front();
 		workList.pop();
 
-		set<Statement*> newDominators;
+		set<BasicBlock*> newDominators;
 
-		int predIdx = 0;
-		for (Iterator<Statement> predIter = currNode->pred(); predIter.valid(); ++predIter) {
-			Statement& predStmt = predIter.current();
-			set<Statement*>& predDominators = ((SSAWorkSpace*)predStmt.work_stack().top_ref(PASS_TAG))->dominators;
+		for (int predIdx = 0; predIdx < currNode->predecessors.entries(); predIdx++) {
+			BasicBlock& predBB = currNode->predecessors[predIdx];
 
 			if (predIdx == 0) {
-				newDominators = predDominators;
+				newDominators = predBB.dominators;
 			} else {
-				set_intersect(newDominators, predDominators);
+				set_intersect(newDominators, predBB.dominators);
 			}
+
 			predIdx++;
 		}
 
 		newDominators.insert(currNode);
 
-		if (!set_equal(newDominators, currDominators)) {
-			((SSAWorkSpace*)currNode->work_stack().top_ref(PASS_TAG))->dominators = newDominators;
+		if (!set_equal(newDominators, currNode->dominators)) {
+			currNode->dominators = newDominators;
 
-			for (Iterator<Statement> succIter = currNode->succ(); succIter.valid(); ++succIter) {
-				Statement& succStmt = succIter.current();
+			for (int succIdx = 0; succIdx < currNode->successors.entries(); succIdx++) {
+				BasicBlock& succBB = currNode->successors[succIdx];
 
-				workList.push(&succStmt);
+				workList.push(&succBB);
 			}
 		}
 	}
 
-	per_stmt_operation(stmts, link_dominants);
-	per_stmt_operation(stmts, find_immediate_dominator);
-	per_stmt_operation(stmts, find_dominance_frontier);
+	for (Iterator<BasicBlock> bbIter = *basicBlocks; bbIter.valid(); ++bbIter) {
+		BasicBlock& bb = bbIter.current();
+
+		BasicBlock* runner = &bb;
+		while (runner != NULL) {
+			RefList<BasicBlock&>& predBBs = runner->predecessors;
+			if (predBBs.entries() == 0) {
+				break;
+			}
+
+			runner = &predBBs[0];
+
+			if (bb.dominators.count(runner) > 0) {
+				break;
+			}
+		}
+
+		bb.immediateDominator = runner;
+	}
+
+	for (Iterator<BasicBlock> bbIter = *basicBlocks; bbIter.valid(); ++bbIter) {
+		BasicBlock& bb = bbIter.current();
+
+		RefList<BasicBlock&>& predBBs = bb.predecessors;
+
+		if (predBBs.entries() >= 2) {
+			// Only a merge-point could be a dominance frontier of other nodes
+
+			for (int predIdx = 0; predIdx < predBBs.entries(); predIdx++) {
+				BasicBlock& predBB = predBBs[predIdx];
+
+				BasicBlock* runner = &predBB;
+
+				while (runner != bb.immediateDominator) {
+					runner->dominanceFrontiers.insert(&bb);
+					runner = runner->immediateDominator;
+				}
+			}
+		}
+	}
+
+	for (Iterator<BasicBlock> bbIter = *basicBlocks; bbIter.valid(); ++bbIter) {
+		BasicBlock& bb = bbIter.current();
+
+		if (bb.immediateDominator) {
+			bb.immediateDominator->dominants.insert(&bb);
+		}
+	}
+
+	for (Iterator<BasicBlock> bbIter = *basicBlocks; bbIter.valid(); ++bbIter) {
+		BasicBlock& bb = bbIter.current();
+
+		cout << bb << endl;
+	}
 }
 
 void generate_phi_stmts(ProgramUnit& pgm) {
@@ -259,7 +304,7 @@ void generate_phi_stmts(ProgramUnit& pgm) {
 		}
 	}
 
-	Expression* phiFunc = new_function("PHI", make_type(REAL_TYPE, 8), pgm);
+	Expression* phiFunc = new_function("PHI", make_type(INTEGER_TYPE, 4), pgm);
 
 //	per_stmt_operation(stmts, insert_phi_stmts);
 	for (Iterator<Statement> stmtIter = stmts; stmtIter.valid(); ++stmtIter) {
@@ -355,11 +400,11 @@ void rename_variables(ProgramUnit& pgm) {
 	variable_renaming_helper(&assignmentStmts[0], variableNumLookup, visitedStmts);
 }
 
-void ssa(ProgramUnit & pgm)
+void ssa(ProgramUnit & pgm, List<BasicBlock>* basicBlocks)
 {
-	compute_dominance(pgm);
-	generate_phi_stmts(pgm);
-	rename_variables(pgm);
+	compute_dominance(pgm, basicBlocks);
+//	generate_phi_stmts(pgm);
+//	rename_variables(pgm);
 }
 
 void dessa(ProgramUnit & pgm)

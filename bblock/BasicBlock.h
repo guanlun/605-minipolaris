@@ -16,6 +16,8 @@
 #include  "Statement/Statement.h"
 #include  "StringElem.h"
 
+#include <set>
+
 using namespace std;
 
 class BasicBlock;
@@ -67,8 +69,11 @@ public:
 
     string name;
 
-private:
-    // put whatever you need to store the information and be able to access it
+    set<BasicBlock*> dominators;
+    BasicBlock* immediateDominator;
+    set<BasicBlock*> dominanceFrontiers;
+    set<BasicBlock*> dominants;
+    set<Symbol*> phiSymbols;
 
     RefList<Statement&> stmts;
 
@@ -79,10 +84,17 @@ private:
 BasicBlock::BasicBlock(const String& name)
 {
     this->name = name;
+    this->immediateDominator = NULL;
 }
 
 BasicBlock::BasicBlock(const BasicBlock& other)
-: name(other.name), stmts(other.stmts), predecessors(other.predecessors), successors(other.successors), Listable(other)
+: name(other.name),
+  stmts(other.stmts),
+  predecessors(other.predecessors),
+  successors(other.successors),
+  immediateDominator(other.immediateDominator),
+  dominators(other.dominators),
+  Listable(other)
 {
 }
 
@@ -201,6 +213,20 @@ BasicBlock::print(ostream &o) const
         }
         o << "\n";
     }
+
+//    if (immediateDominator != NULL) {
+//    	o << "Immediate dominator: " << immediateDominator->name << endl;
+//    }
+//    for (set<BasicBlock*>::iterator domIter = dominators.begin(); domIter != dominators.end(); ++domIter) {
+//    	BasicBlock* dom = *domIter;
+//    	o << dom->name << endl;
+//    }
+
+    o << "--------------dominance frontiers: ";
+	for (set<BasicBlock*>::iterator domIter = dominanceFrontiers.begin(); domIter != dominanceFrontiers.end(); ++domIter) {
+		BasicBlock* dom = *domIter;
+		o << dom->name << ", ";
+	}
 }
 
 // you will need many more functions here (or you can put some in BasicBlock.cc

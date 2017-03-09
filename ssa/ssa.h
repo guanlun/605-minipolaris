@@ -7,8 +7,9 @@
 
 #include "ProgramUnit.h"
 #include "SSAWorkSpace.h"
+#include "../bblock/BasicBlock.h"
 
-void ssa(ProgramUnit & pgm);
+void ssa(ProgramUnit & pgm, List<BasicBlock>* basicBlocks);
 void dessa(ProgramUnit & pgm);
 
 #endif

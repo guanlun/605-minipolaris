@@ -173,7 +173,7 @@ driver(int argc, char *argv[])
     ///////////////////////////////////////
     
     if (switch_value("ssa")) {
-      ssa(pgm);
+      ssa(pgm, pgm_basic_blocks);
       
       switch (switch_value("p_ssa")) {
       case 1:
