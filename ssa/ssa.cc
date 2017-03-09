@@ -322,26 +322,13 @@ void populate_phi_args(Statement& phiStmt, map<Symbol*, vector<int> >& variableN
          ++mapIter) {
         Symbol* key = mapIter->first;
 
-        if (strcmp(orig_symbol_name(*key), origName) == 0) {
+        if (strcmp(key->name_ref(), origName) == 0) {
             const char* phiArgName = current_name(key, variableNumLookup);
             Symbol* phiArgSymbol = key->clone();
             phiArgSymbol->name(phiArgName);
 
             Expression* argExpr = new IDExpr(phiArgSymbol->type(), *phiArgSymbol);
             phiParams.arg_list().ins_last(argExpr);
-
-            /*
-            for (Mutator<Expression> argIter = phiArgs; argIter.valid(); ++argIter) {
-                Expression& argExpr = argIter.current();
-                cout << "arg: " << argExpr << endl;
-
-                if (argExpr.op() == INTEGER_CONSTANT_OP) {
-                    cout << "is constant!!!!!!!!!!!!!!!!!!" << endl;
-                    argIter.assign() = constant(1);
-                    break;
-                }
-            }
-            */
         }
     }
 }
@@ -430,7 +417,26 @@ void variable_renaming_helper(
         variable_renaming_helper(pgm, dominantBB, variableNumLookup, counter, visited, depth + 1);
     }
 
-    // TODO: pop the stack
+    // Pop the stacks
+    for (int stmtIdx = 0; stmtIdx < bb->stmts.entries(); stmtIdx++) {
+        Statement& stmt = bb->stmts[stmtIdx];
+
+        for (Iterator<Expression> outRefMut = stmt.out_refs(); outRefMut.valid(); ++outRefMut) {
+            Expression& outRefExpr = outRefMut.current();
+
+            // TODO: Consider array later
+            if (outRefExpr.op() != ID_OP) {
+                continue;
+            }
+
+            Symbol& outRefSymbol = outRefExpr.symbol();
+
+            map<Symbol*, vector<int> >::iterator vnIter = variableNumLookup.find(&outRefSymbol);
+            vector<int>& numStack = vnIter->second;
+
+            numStack.pop_back();
+        }
+    }
 }
 
 void rename_variables(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {

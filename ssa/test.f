@@ -1,15 +1,11 @@
-        PROGRAM TEST15
-        INTEGER*4 i,j,k,l
+        PROGRAM TEST4
+        INTEGER*4 i,j
         
-        k = 4
-        IF ( j .EQ. i) THEN
-          DO i=1,10,1
-            k = 5
-            print *,i
-          ENDDO
-          print *,j
+        i = 1
+        if ( i .EQ. 0 ) THEN
+          PRINT *, i
         ENDIF
-        PRINT *, j,i
+		PRINT *, i
         STOP
         END
 
