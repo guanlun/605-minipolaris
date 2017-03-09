@@ -11,6 +11,7 @@
 #include "Expression/IDExpr.h"
 #include "Expression/expr_funcs.h"
 
+#include <sstream>
 #include <queue>
 #include <vector>
 #include <map>
@@ -18,34 +19,50 @@
 int PASS_TAG = 3;
 
 void per_stmt_operation(Iterator<Statement> stmts, void (*forEachFunction)(Statement&)) {
-	for (Iterator<Statement> stmtIter = stmts; stmtIter.valid(); ++stmtIter) {
-		Statement& stmt = stmtIter.current();
-		forEachFunction(stmt);
-	}
+    for (Iterator<Statement> stmtIter = stmts; stmtIter.valid(); ++stmtIter) {
+        Statement& stmt = stmtIter.current();
+        forEachFunction(stmt);
+    }
 }
 
 template <class T>
 void set_intersect(set<T>& s1, set<T>& s2) {
-	for (typename set<T>::iterator it = s1.begin(); it != s1.end(); ++it) {
-		if (s2.count(*it) == 0) {
-			s1.erase(it);
-		}
-	}
+    for (typename set<T>::iterator it = s1.begin(); it != s1.end(); ++it) {
+        if (s2.count(*it) == 0) {
+            s1.erase(it);
+        }
+    }
 }
 
 template <class T>
 bool set_equal(set<T>& s1, set<T>& s2) {
-	if (s1.size() != s2.size()) {
-		return false;
-	}
+    if (s1.size() != s2.size()) {
+        return false;
+    }
 
-	for (typename set<T>::iterator it = s1.begin(); it != s1.end(); ++it) {
-		if (s2.count(*it) == 0) {
-			return false;
-		}
-	}
+    for (typename set<T>::iterator it = s1.begin(); it != s1.end(); ++it) {
+        if (s2.count(*it) == 0) {
+            return false;
+        }
+    }
 
-	return true;
+    return true;
+}
+
+bool is_phi_stmt(Statement& stmt) {
+    if (stmt.stmt_class() != ASSIGNMENT_STMT) {
+        return false;
+    }
+
+    const Expression& rhs = stmt.rhs();
+
+    if (rhs.op() != FUNCTION_CALL_OP) {
+        return false;
+    }
+
+    const Expression& func = rhs.function();
+
+    return (strcmp(func.symbol().name_ref(), "PHI") == 0);
 }
 
 void link_dominants(Statement& stmt) {
@@ -64,235 +81,256 @@ void insert_phi_stmts(Statement& stmt) {
 }
 
 void compute_dominance(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {
-	for (Iterator<BasicBlock> bbIter = *basicBlocks; bbIter.valid(); ++bbIter) {
-		BasicBlock& bb = bbIter.current();
+    for (Iterator<BasicBlock> bbIter = *basicBlocks; bbIter.valid(); ++bbIter) {
+        BasicBlock& bb = bbIter.current();
 
-		for (Iterator<BasicBlock> domIter = *basicBlocks; domIter.valid(); ++domIter) {
-			BasicBlock& initBB = domIter.current();
+        for (Iterator<BasicBlock> domIter = *basicBlocks; domIter.valid(); ++domIter) {
+            BasicBlock& initBB = domIter.current();
 
-			bb.dominators.insert(&initBB);
-		}
-	}
+            bb.dominators.insert(&initBB);
+        }
+    }
 
-	queue<BasicBlock*> workList;
-	workList.push(basicBlocks->first_ref());
+    queue<BasicBlock*> workList;
+    workList.push(basicBlocks->first_ref());
 
-	while (!workList.empty()) {
-		BasicBlock* currNode = workList.front();
-		workList.pop();
+    while (!workList.empty()) {
+        BasicBlock* currNode = workList.front();
+        workList.pop();
 
-		set<BasicBlock*> newDominators;
+        set<BasicBlock*> newDominators;
 
-		for (int predIdx = 0; predIdx < currNode->predecessors.entries(); predIdx++) {
-			BasicBlock& predBB = currNode->predecessors[predIdx];
+        for (int predIdx = 0; predIdx < currNode->predecessors.entries(); predIdx++) {
+            BasicBlock& predBB = currNode->predecessors[predIdx];
 
-			if (predIdx == 0) {
-				newDominators = predBB.dominators;
-			} else {
-				set_intersect(newDominators, predBB.dominators);
-			}
+            if (predIdx == 0) {
+                newDominators = predBB.dominators;
+            } else {
+                set_intersect(newDominators, predBB.dominators);
+            }
 
-			predIdx++;
-		}
+            predIdx++;
+        }
 
-		newDominators.insert(currNode);
+        newDominators.insert(currNode);
 
-		if (!set_equal(newDominators, currNode->dominators)) {
-			currNode->dominators = newDominators;
+        if (!set_equal(newDominators, currNode->dominators)) {
+            currNode->dominators = newDominators;
 
-			for (int succIdx = 0; succIdx < currNode->successors.entries(); succIdx++) {
-				BasicBlock& succBB = currNode->successors[succIdx];
+            for (int succIdx = 0; succIdx < currNode->successors.entries(); succIdx++) {
+                BasicBlock& succBB = currNode->successors[succIdx];
 
-				workList.push(&succBB);
-			}
-		}
-	}
+                workList.push(&succBB);
+            }
+        }
+    }
 
-	for (Iterator<BasicBlock> bbIter = *basicBlocks; bbIter.valid(); ++bbIter) {
-		BasicBlock& bb = bbIter.current();
+    for (Iterator<BasicBlock> bbIter = *basicBlocks; bbIter.valid(); ++bbIter) {
+        BasicBlock& bb = bbIter.current();
 
-		BasicBlock* runner = &bb;
-		while (runner != NULL) {
-			RefList<BasicBlock&>& predBBs = runner->predecessors;
-			if (predBBs.entries() == 0) {
-				break;
-			}
+        BasicBlock* runner = &bb;
+        while (runner != NULL) {
+            RefList<BasicBlock&>& predBBs = runner->predecessors;
+            if (predBBs.entries() == 0) {
+                break;
+            }
 
-			runner = &predBBs[0];
+            runner = &predBBs[0];
 
-			if (bb.dominators.count(runner) > 0) {
-				break;
-			}
-		}
+            if (bb.dominators.count(runner) > 0) {
+                break;
+            }
+        }
 
-		bb.immediateDominator = runner;
-	}
+        bb.immediateDominator = runner;
+    }
 
-	for (Iterator<BasicBlock> bbIter = *basicBlocks; bbIter.valid(); ++bbIter) {
-		BasicBlock& bb = bbIter.current();
+    for (Iterator<BasicBlock> bbIter = *basicBlocks; bbIter.valid(); ++bbIter) {
+        BasicBlock& bb = bbIter.current();
 
-		RefList<BasicBlock&>& predBBs = bb.predecessors;
+        RefList<BasicBlock&>& predBBs = bb.predecessors;
 
-		if (predBBs.entries() >= 2) {
-			// Only a merge-point could be a dominance frontier of other nodes
+        if (predBBs.entries() >= 2) {
+            // Only a merge-point could be a dominance frontier of other nodes
 
-			for (int predIdx = 0; predIdx < predBBs.entries(); predIdx++) {
-				BasicBlock& predBB = predBBs[predIdx];
+            for (int predIdx = 0; predIdx < predBBs.entries(); predIdx++) {
+                BasicBlock& predBB = predBBs[predIdx];
 
-				BasicBlock* runner = &predBB;
+                BasicBlock* runner = &predBB;
 
-				while (runner != bb.immediateDominator) {
-					runner->dominanceFrontiers.insert(&bb);
-					runner = runner->immediateDominator;
-				}
-			}
-		}
-	}
+                while (runner != bb.immediateDominator) {
+                    runner->dominanceFrontiers.insert(&bb);
+                    runner = runner->immediateDominator;
+                }
+            }
+        }
+    }
 
-	for (Iterator<BasicBlock> bbIter = *basicBlocks; bbIter.valid(); ++bbIter) {
-		BasicBlock& bb = bbIter.current();
+    for (Iterator<BasicBlock> bbIter = *basicBlocks; bbIter.valid(); ++bbIter) {
+        BasicBlock& bb = bbIter.current();
 
-		if (bb.immediateDominator) {
-			bb.immediateDominator->dominants.insert(&bb);
-		}
-	}
+        if (bb.immediateDominator) {
+            bb.immediateDominator->dominants.insert(&bb);
+        }
+    }
 
-	for (Iterator<BasicBlock> bbIter = *basicBlocks; bbIter.valid(); ++bbIter) {
-		BasicBlock& bb = bbIter.current();
+    for (Iterator<BasicBlock> bbIter = *basicBlocks; bbIter.valid(); ++bbIter) {
+        BasicBlock& bb = bbIter.current();
 
-		cout << bb << endl;
-	}
+        cout << bb << endl;
+    }
 }
 
 void generate_phi_stmts(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {
-	StmtList& stmts = pgm.stmts();
+    StmtList& stmts = pgm.stmts();
 
-	for (DictionaryIter<Symbol> symIter = pgm.symtab().iterator(); symIter.valid(); ++symIter) {
-		Symbol& sym = symIter.current();
-		set<BasicBlock*> workList;
-		set<BasicBlock*> added;
+    for (DictionaryIter<Symbol> symIter = pgm.symtab().iterator(); symIter.valid(); ++symIter) {
+        Symbol& sym = symIter.current();
+        set<BasicBlock*> workList;
+        set<BasicBlock*> added;
 
-		for (Iterator<BasicBlock> bbIter = *basicBlocks; bbIter.valid(); ++bbIter) {
-			BasicBlock& bb = bbIter.current();
+        for (Iterator<BasicBlock> bbIter = *basicBlocks; bbIter.valid(); ++bbIter) {
+            BasicBlock& bb = bbIter.current();
 
-			for (int stmtIdx = 0; stmtIdx < bb.stmts.entries(); stmtIdx++) {
-				Statement& stmt = bb.stmts[stmtIdx];
-				Iterator<Expression> outIter = stmt.out_refs();
+            for (int stmtIdx = 0; stmtIdx < bb.stmts.entries(); stmtIdx++) {
+                Statement& stmt = bb.stmts[stmtIdx];
+                Iterator<Expression> outIter = stmt.out_refs();
 
-				if (!outIter.valid()) {
-					continue;
-				}
+                if (!outIter.valid()) {
+                    continue;
+                }
 
-				Expression& outExpr = outIter.current();
-				Symbol& assignee = outExpr.symbol();
+                Expression& outExpr = outIter.current();
+                Symbol& assignee = outExpr.symbol();
 
-				if (&assignee == &sym) {
-					workList.insert(&bb);
-				}
-			}
-		}
+                if (&assignee == &sym) {
+                    workList.insert(&bb);
+                }
+            }
+        }
 
-		while (!workList.empty()) {
-			BasicBlock* currNode = *workList.begin();
-			workList.erase(currNode);
+        while (!workList.empty()) {
+            BasicBlock* currNode = *workList.begin();
+            workList.erase(currNode);
 
-			for (set<BasicBlock*>::iterator dfIter = currNode->dominanceFrontiers.begin();
-				dfIter != currNode->dominanceFrontiers.end();
-				++dfIter) {
-				BasicBlock* dfNode = *dfIter;
+            for (set<BasicBlock*>::iterator dfIter = currNode->dominanceFrontiers.begin();
+                 dfIter != currNode->dominanceFrontiers.end();
+                 ++dfIter) {
+                BasicBlock* dfNode = *dfIter;
 
-				dfNode->phiSymbols.insert(&sym);
+                dfNode->phiSymbols.insert(&sym);
 
-				if (added.count(dfNode) == 0) {
-					workList.insert(dfNode);
-					added.insert(dfNode);
-				}
+                if (added.count(dfNode) == 0) {
+                    workList.insert(dfNode);
+                    added.insert(dfNode);
+                }
 
-				cout << sym.tag_ref() << " is added to " << dfNode->name << endl;
-			}
-		}
-	}
+                cout << sym.tag_ref() << " is added to " << dfNode->name << endl;
+            }
+        }
+    }
 
-	Expression* phiFunc = new_function("PHI", make_type(INTEGER_TYPE, 4), pgm);
+    Expression* phiFunc = new_function("PHI", make_type(INTEGER_TYPE, 4), pgm);
 
-	for (Iterator<BasicBlock> bbIter = *basicBlocks; bbIter.valid(); ++bbIter) {
-		BasicBlock& bb = bbIter.current();
+    for (Iterator<BasicBlock> bbIter = *basicBlocks; bbIter.valid(); ++bbIter) {
+        BasicBlock& bb = bbIter.current();
 
-		for (set<Symbol*>::iterator phiIter = bb.phiSymbols.begin();
-			phiIter != bb.phiSymbols.end();
-			++phiIter) {
-			Symbol* phiSymbol = *phiIter;
+        for (set<Symbol*>::iterator phiIter = bb.phiSymbols.begin();
+             phiIter != bb.phiSymbols.end();
+             ++phiIter) {
+            Symbol* phiSymbol = *phiIter;
 
-			Expression* args = comma();
-			Expression* phiFuncExpr = function_call(phiFunc->clone(), args);
-			Expression* assignedExpr = new IDExpr(phiSymbol->type(), *phiSymbol);
+            Expression* args = comma();
+            Expression* phiFuncExpr = function_call(phiFunc->clone(), args);
+            Expression* assignedExpr = new IDExpr(phiSymbol->type(), *phiSymbol);
 
-			Statement* phiStmt = new AssignmentStmt(stmts.new_tag(), assignedExpr, phiFuncExpr);
+            Statement* phiStmt = new AssignmentStmt(stmts.new_tag(), assignedExpr, phiFuncExpr);
 
-			stmts.ins_before(phiStmt, &bb.stmts[0]);
-			bb.stmts.ins_before(*phiStmt, bb.stmts[0]);
-		}
-	}
+            stmts.ins_before(phiStmt, &bb.stmts[0]);
+            bb.stmts.ins_before(*phiStmt, bb.stmts[0]);
+        }
+    }
 }
 
 /*
 void variable_renaming_helper(Statement* stmt, map<Symbol*, vector<int> >& variableNumLookup, set<Statement*>& visited) {
-	if (visited.count(stmt) > 0) {
-		return;
-	}
+    if (visited.count(stmt) > 0) {
+        return;
+    }
 
-	cout << "visiting: " << stmt->tag() << " " << stmt << endl;
+    cout << "visiting: " << stmt->tag() << " " << stmt << endl;
 
-	SSAWorkSpace* ws = get_ssa_ws(*stmt);
+    SSAWorkSpace* ws = get_ssa_ws(*stmt);
 
-	for (Iterator<Expression> inRefIter = stmt->in_refs(); inRefIter.valid(); ++inRefIter) {
-		Expression& inRefExpr = inRefIter.current();
+    for (Iterator<Expression> inRefIter = stmt->in_refs(); inRefIter.valid(); ++inRefIter) {
+        Expression& inRefExpr = inRefIter.current();
 
-		if (inRefExpr.op() != ID_OP) {
-			continue;
-		}
+        if (inRefExpr.op() != ID_OP) {
+            continue;
+        }
 
-		Symbol& inRefSymbol = inRefExpr.symbol();
-		map<Symbol*, vector<int> >::iterator vnIter = variableNumLookup.find(&inRefSymbol);
-	}
+        Symbol& inRefSymbol = inRefExpr.symbol();
+        map<Symbol*, vector<int> >::iterator vnIter = variableNumLookup.find(&inRefSymbol);
+    }
 
-	// Look at the new definitions and rename any redefined variables
-	for (Iterator<Expression> outRefIter = stmt->out_refs(); outRefIter.valid(); ++outRefIter) {
-		Expression& outRefExpr = outRefIter.current();
+    // Look at the new definitions and rename any redefined variables
+    for (Iterator<Expression> outRefIter = stmt->out_refs(); outRefIter.valid(); ++outRefIter) {
+        Expression& outRefExpr = outRefIter.current();
 
-		if (outRefExpr.op() != ID_OP) {
-			continue;
-		}
+        if (outRefExpr.op() != ID_OP) {
+            continue;
+        }
 
-		Symbol& outRefSymbol = outRefExpr.symbol();
-		map<Symbol*, vector<int> >::iterator vnIter = variableNumLookup.find(&outRefSymbol);
+        Symbol& outRefSymbol = outRefExpr.symbol();
+        map<Symbol*, vector<int> >::iterator vnIter = variableNumLookup.find(&outRefSymbol);
 
-		vector<int>& numStack = vnIter->second;
-		numStack.push_back(numStack.back() + 1);
-	}
+        vector<int>& numStack = vnIter->second;
+        numStack.push_back(numStack.back() + 1);
+    }
 
-	visited.insert(stmt);
+    visited.insert(stmt);
 
-	// Recursively visit all the dominants
-	for (set<Statement*>::iterator dominantIter = ws->dominants.begin();
-		dominantIter != ws->dominants.end();
-		++dominantIter) {
+    // Recursively visit all the dominants
+    for (set<Statement*>::iterator dominantIter = ws->dominants.begin();
+        dominantIter != ws->dominants.end();
+        ++dominantIter) {
 
-		Statement* dominantStmt = *dominantIter;
-		if (dominantStmt == stmt) {
-			continue;
-		}
+        Statement* dominantStmt = *dominantIter;
+        if (dominantStmt == stmt) {
+            continue;
+        }
 
-		variable_renaming_helper(dominantStmt, variableNumLookup, visited);
-	}
+        variable_renaming_helper(dominantStmt, variableNumLookup, visited);
+    }
 }
 */
 
+const char* new_name(Symbol* sym, map<Symbol*, vector<int> >& variableNumLookup, map<Symbol*, int>& counter) {
+    map<Symbol*, vector<int> >::iterator vnIter = variableNumLookup.find(sym);
+    map<Symbol*, int>::iterator currCountIter = counter.find(sym);
+
+    vector<int>& numStack = vnIter->second;
+    int currCount = currCountIter->second;
+
+    int newCount = currCount + 1;
+
+    currCountIter->second = newCount;
+
+    numStack.push_back(newCount);
+
+    stringstream ss;
+    ss << sym->name_ref() << "@" << newCount;
+
+    return ss.str().c_str();
+}
+
 void variable_renaming_helper(
-    BasicBlock* bb,
-    map<Symbol*, vector<int> >& variableNumLookup,
-    set<BasicBlock*>& visited,
-    int depth = 0) {
+        BasicBlock* bb,
+        map<Symbol*, vector<int> >& variableNumLookup,
+        map<Symbol*, int>& counter,
+        set<BasicBlock*>& visited,
+        int depth = 0) {
+
     if (visited.count(bb) > 0) {
         return;
     }
@@ -310,12 +348,22 @@ void variable_renaming_helper(
          ++domIter) {
         BasicBlock* dominantBB = *domIter;
 
-        variable_renaming_helper(dominantBB, variableNumLookup, visited, depth + 1);
+        for (int stmtIdx = 0; stmtIdx < bb->stmts.entries(); stmtIdx++) {
+            Statement& stmt = bb->stmts[stmtIdx];
+
+            if (is_phi_stmt(stmt)) {
+                const char* newVarName = new_name(&stmt.lhs().symbol(), variableNumLookup, counter);
+                cout << newVarName << endl;
+            }
+        }
+
+        variable_renaming_helper(dominantBB, variableNumLookup, counter, visited, depth + 1);
     }
 }
 
 void rename_variables(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {
     set<BasicBlock*> visited;
+    map<Symbol*, int> counter;
     map<Symbol*, vector<int> > variableNumLookup;
 
     for (DictionaryIter<Symbol> symIter = pgm.symtab().iterator(); symIter.valid(); ++symIter) {
@@ -323,19 +371,20 @@ void rename_variables(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {
 
         vector<int> numStack;
         numStack.push_back(0);
+        counter.insert(pair<Symbol*, int>(&symbol, 0));
 
         variableNumLookup.insert(pair<Symbol*, vector<int> >(&symbol, numStack));
     }
 
     Iterator<BasicBlock> startIter = *basicBlocks;
 
-    variable_renaming_helper(&startIter.current(), variableNumLookup, visited);
+    variable_renaming_helper(&startIter.current(), variableNumLookup, counter, visited);
 }
 
 void ssa(ProgramUnit & pgm, List<BasicBlock>* basicBlocks)
 {
-	compute_dominance(pgm, basicBlocks);
-	generate_phi_stmts(pgm, basicBlocks);
+    compute_dominance(pgm, basicBlocks);
+    generate_phi_stmts(pgm, basicBlocks);
     rename_variables(pgm, basicBlocks);
 }
 
