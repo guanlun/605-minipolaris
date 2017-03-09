@@ -222,11 +222,17 @@ BasicBlock::print(ostream &o) const
 //    	o << dom->name << endl;
 //    }
 
-    o << "--------------dominance frontiers: ";
-	for (set<BasicBlock*>::iterator domIter = dominanceFrontiers.begin(); domIter != dominanceFrontiers.end(); ++domIter) {
-		BasicBlock* dom = *domIter;
-		o << dom->name << ", ";
-	}
+//    o << "--------------dominance frontiers: ";
+//	for (set<BasicBlock*>::iterator domIter = dominanceFrontiers.begin(); domIter != dominanceFrontiers.end(); ++domIter) {
+//		BasicBlock* dom = *domIter;
+//		o << dom->name << ", ";
+//	}
+
+    for (set<Symbol*>::iterator symIter = phiSymbols.begin(); symIter != phiSymbols.end(); ++symIter) {
+        Symbol* phiSym = *symIter;
+
+        cout << phiSym->name_ref() << ", ";
+    }
 }
 
 // you will need many more functions here (or you can put some in BasicBlock.cc

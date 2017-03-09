@@ -226,7 +226,7 @@ void generate_phi_stmts(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {
                     added.insert(dfNode);
                 }
 
-                cout << sym.tag_ref() << " is added to " << dfNode->name << endl;
+//                cout << sym.tag_ref() << " is added to " << dfNode->name << endl;
             }
         }
     }
@@ -247,64 +247,17 @@ void generate_phi_stmts(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {
 
             Statement* phiStmt = new AssignmentStmt(stmts.new_tag(), assignedExpr, phiFuncExpr);
 
-            stmts.ins_before(phiStmt, &bb.stmts[0]);
-            bb.stmts.ins_before(*phiStmt, bb.stmts[0]);
+            stmts.ins_after(phiStmt, &bb.stmts[0]);
+            bb.stmts.ins_after(*phiStmt, bb.stmts[0]);
         }
+    }
+
+    for (Iterator<BasicBlock> bbIter = *basicBlocks; bbIter.valid(); ++bbIter) {
+        BasicBlock& bb = bbIter.current();
+
+//        cout << bb << endl;
     }
 }
-
-/*
-void variable_renaming_helper(Statement* stmt, map<Symbol*, vector<int> >& variableNumLookup, set<Statement*>& visited) {
-    if (visited.count(stmt) > 0) {
-        return;
-    }
-
-    cout << "visiting: " << stmt->tag() << " " << stmt << endl;
-
-    SSAWorkSpace* ws = get_ssa_ws(*stmt);
-
-    for (Iterator<Expression> inRefIter = stmt->in_refs(); inRefIter.valid(); ++inRefIter) {
-        Expression& inRefExpr = inRefIter.current();
-
-        if (inRefExpr.op() != ID_OP) {
-            continue;
-        }
-
-        Symbol& inRefSymbol = inRefExpr.symbol();
-        map<Symbol*, vector<int> >::iterator vnIter = variableNumLookup.find(&inRefSymbol);
-    }
-
-    // Look at the new definitions and rename any redefined variables
-    for (Iterator<Expression> outRefIter = stmt->out_refs(); outRefIter.valid(); ++outRefIter) {
-        Expression& outRefExpr = outRefIter.current();
-
-        if (outRefExpr.op() != ID_OP) {
-            continue;
-        }
-
-        Symbol& outRefSymbol = outRefExpr.symbol();
-        map<Symbol*, vector<int> >::iterator vnIter = variableNumLookup.find(&outRefSymbol);
-
-        vector<int>& numStack = vnIter->second;
-        numStack.push_back(numStack.back() + 1);
-    }
-
-    visited.insert(stmt);
-
-    // Recursively visit all the dominants
-    for (set<Statement*>::iterator dominantIter = ws->dominants.begin();
-        dominantIter != ws->dominants.end();
-        ++dominantIter) {
-
-        Statement* dominantStmt = *dominantIter;
-        if (dominantStmt == stmt) {
-            continue;
-        }
-
-        variable_renaming_helper(dominantStmt, variableNumLookup, visited);
-    }
-}
-*/
 
 const char* new_name(Symbol* sym, map<Symbol*, vector<int> >& variableNumLookup, map<Symbol*, int>& counter) {
     map<Symbol*, vector<int> >::iterator vnIter = variableNumLookup.find(sym);
@@ -325,18 +278,44 @@ const char* new_name(Symbol* sym, map<Symbol*, vector<int> >& variableNumLookup,
     return ss.str().c_str();
 }
 
-Expression* replace_symbol(Expression* expr, Symbol* oldSymbol, Expression* newExpr) {
-    if (expr->op() == ID_OP) {
-        if (&expr->symbol() == oldSymbol) {
-            return newExpr->clone();
-        }
-    } else {
-        for (Mutator<Expression> exprMut = expr->arg_list(); exprMut.valid(); ++exprMut) {
-            exprMut.assign() = replace_symbol(exprMut.pull(), oldSymbol, newExpr);
+const char* current_name(Symbol* sym, map<Symbol*, vector<int> >& variableNumLookup) {
+    map<Symbol*, vector<int> >::iterator vnIter = variableNumLookup.find(sym);
+    vector<int>& numStack = vnIter->second;
+
+    stringstream ss;
+    ss << sym->name_ref() << "@" << numStack.back();
+
+    return ss.str().c_str();
+}
+
+char* orig_symbol_name(Symbol& symbol) {
+    const char* symbolName = symbol.name_ref();
+    char* origName = new char[strlen(symbolName)];
+
+    strcpy(origName, symbolName);
+
+    origName = strtok(origName, "@");
+
+    return origName;
+}
+
+void populate_phi_args(Statement& phiStmt, map<Symbol*, vector<int> >& variableNumLookup) {
+    Expression& lhs = phiStmt.lhs();
+    Symbol& phiSymbol = lhs.symbol();
+
+    char* origName = orig_symbol_name(phiSymbol);
+
+    for (map<Symbol*, vector<int> >::iterator mapIter = variableNumLookup.begin();
+         mapIter != variableNumLookup.end();
+         ++mapIter) {
+        Symbol* key = mapIter->first;
+
+        cout << "in map: " << key->name_ref() << endl;
+
+        if (strcmp(key->name_ref(), origName) == 0) {
+
         }
     }
-
-    return expr;
 }
 
 void variable_renaming_helper(
@@ -355,35 +334,75 @@ void variable_renaming_helper(
         cout << "    ";
     }
 
-    cout << "Now visited bb: " << bb->name << ": ";
+    cout << "Now visited bb: " << bb->name << endl;
 
     visited.insert(bb);
 
     for (int stmtIdx = 0; stmtIdx < bb->stmts.entries(); stmtIdx++) {
         Statement& stmt = bb->stmts[stmtIdx];
 
-        if (is_phi_stmt(stmt)) {
-            cout << "IS PHI STMT: " << stmt.tag() << endl;
-            for (Mutator<Expression> outRefMut = stmt.out_refs(); outRefMut.valid(); ++outRefMut) {
-                Expression& outRefExpr = outRefMut.current();
+        for (Iterator<Expression> inRefIter = stmt.in_refs(); inRefIter.valid(); ++inRefIter) {
+            Expression& inRefExpr = inRefIter.current();
 
-                Symbol& assignedSymbol = outRefExpr.symbol();
-                const char* newVarName = new_name(&assignedSymbol, variableNumLookup, counter);
-
-                Symbol* renamedSymbol = assignedSymbol.clone();
-                renamedSymbol->name(newVarName);
-
-                outRefExpr.symbol(*renamedSymbol);
+            // TODO: Consider array later
+            if (inRefExpr.op() != ID_OP) {
+                continue;
             }
+
+            Symbol& inRefSymbol = inRefExpr.symbol();
+            const char* varName = current_name(&inRefSymbol, variableNumLookup);
+
+            Symbol* renamedSymbol = inRefSymbol.clone();
+            renamedSymbol->name(varName);
+
+            inRefExpr.symbol(*renamedSymbol);
+        }
+
+        for (Iterator<Expression> outRefMut = stmt.out_refs(); outRefMut.valid(); ++outRefMut) {
+            Expression& outRefExpr = outRefMut.current();
+
+            // TODO: Consider array later
+            if (outRefExpr.op() != ID_OP) {
+                continue;
+            }
+
+            Symbol& outRefSymbol = outRefExpr.symbol();
+            const char* newVarName = new_name(&outRefSymbol, variableNumLookup, counter);
+
+            Symbol* renamedSymbol = outRefSymbol.clone();
+            renamedSymbol->name(newVarName);
+
+            outRefExpr.symbol(*renamedSymbol);
         }
     }
 
+    // Iterate each successor in the CFG
+    for (int succIdx = 0; succIdx < bb->successors.entries(); succIdx++) {
+        BasicBlock& succBB = bb->successors[succIdx];
+
+        cout << "in succ " << succBB.name << " with phi #: " << succBB.phiSymbols.size() << endl;
+
+        for (int stmtIdx = 0; stmtIdx < succBB.stmts.entries(); stmtIdx++) {
+            Statement& stmt = succBB.stmts[stmtIdx];
+
+            if (!is_phi_stmt(stmt)) {
+                continue;
+            }
+
+            populate_phi_args(stmt, variableNumLookup);
+        }
+    }
+
+    // Iterate each child in the dominator tree
     for (set<BasicBlock*>::iterator domIter = bb->dominants.begin();
          domIter != bb->dominants.end();
          ++domIter) {
         BasicBlock* dominantBB = *domIter;
+
         variable_renaming_helper(pgm, dominantBB, variableNumLookup, counter, visited, depth + 1);
     }
+
+    // TODO: pop the stack
 }
 
 void rename_variables(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {
