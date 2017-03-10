@@ -252,7 +252,6 @@ void generate_phi_stmts(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {
     Expression* phiFunc = new_function("PHI", make_type(INTEGER_TYPE, 4), pgm);
 
     // Insert PHI statements after function calls for each of the arguments
-    /*
     for (Iterator<BasicBlock> bbIter = *basicBlocks; bbIter.valid(); ++bbIter) {
         BasicBlock& bb = bbIter.current();
 
@@ -260,6 +259,7 @@ void generate_phi_stmts(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {
             Statement& stmt = bb.stmts[stmtIdx];
 
             if (is_phi_stmt(stmt)) {
+                // Already a PHI statement, ignore this stmt
                 continue;
             }
 
@@ -281,9 +281,10 @@ void generate_phi_stmts(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {
 
                     Symbol& phiAssignedSymbol = argExpr.symbol();
 
-                    Expression* phiArgs = comma(argExpr.clone());
+//                    Expression* phiArgs = comma(argExpr.clone());
+                    Expression* phiArgs = comma();
                     Expression* phiFuncExpr = function_call(phiFunc->clone(), phiArgs);
-                    Expression* assignedExpr = new IDExpr(phiAssignedSymbol.type(), *phiAssignedSymbol.clone());
+                    Expression* assignedExpr = new IDExpr(phiAssignedSymbol.type(), phiAssignedSymbol);
 
                     Statement* phiStmt = new AssignmentStmt(stmts.new_tag(), assignedExpr, phiFuncExpr);
                     phiStmt->work_stack().push(new SSAWorkSpace(PASS_TAG, true));
@@ -294,7 +295,6 @@ void generate_phi_stmts(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {
             }
         }
     }
-    */
 
     for (Iterator<BasicBlock> bbIter = *basicBlocks; bbIter.valid(); ++bbIter) {
         BasicBlock& bb = bbIter.current();
@@ -324,6 +324,12 @@ void generate_phi_stmts(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {
 
 const char* new_name(Symbol* sym, map<Symbol*, vector<int> >& variableNumLookup, map<Symbol*, int>& counter) {
     map<Symbol*, vector<int> >::iterator vnIter = variableNumLookup.find(sym);
+
+    if (vnIter == variableNumLookup.end()) {
+        // Not found, return original symbol name
+        return sym->name_ref();
+    }
+
     map<Symbol*, int>::iterator currCountIter = counter.find(sym);
 
     vector<int>& numStack = vnIter->second;
@@ -342,7 +348,14 @@ const char* new_name(Symbol* sym, map<Symbol*, vector<int> >& variableNumLookup,
 }
 
 const char* current_name(Symbol* sym, map<Symbol*, vector<int> >& variableNumLookup) {
+
     map<Symbol*, vector<int> >::iterator vnIter = variableNumLookup.find(sym);
+
+    if (vnIter == variableNumLookup.end()) {
+        // Not found, return original symbol name
+        return sym->name_ref();
+    }
+
     vector<int>& numStack = vnIter->second;
 
     stringstream ss;
@@ -413,11 +426,34 @@ void variable_renaming_helper(
         Statement& stmt = bb->stmts[stmtIdx];
 
         if (is_phi_stmt_for_function(stmt)) {
+            cout << "Function PHI STMT: ------------------------------" << endl;
+            cout << stmt << endl;
+
+            Symbol& assignedSymbol = stmt.lhs().symbol();
+
+            Expression& phiFuncExpr = stmt.rhs();
+            Expression& paramCommaExpr = phiFuncExpr.parameters_guarded();
+
+            const char* origName = current_name(&assignedSymbol, variableNumLookup);
+            Symbol* origVarSymbol = assignedSymbol.clone();
+            origVarSymbol->name(origName);
+            Expression* origParamExpr = new IDExpr(origVarSymbol->type(), *origVarSymbol);
+
+            const char* alteredName = new_name(&assignedSymbol, variableNumLookup, counter);
+            Symbol* alteredVarSymbol = assignedSymbol.clone();
+            alteredVarSymbol->name(alteredName);
+            Expression* alteredParamExpr = new IDExpr(alteredVarSymbol->type(), *alteredVarSymbol);
+
+            paramCommaExpr.arg_list().ins_last(origParamExpr);
+            paramCommaExpr.arg_list().ins_last(alteredParamExpr);
+
+            const char* phiResultName = new_name(&assignedSymbol, variableNumLookup, counter);
+            Symbol* phiResultVarSymbol = assignedSymbol.clone();
+            phiResultVarSymbol->name(phiResultName);
+            stmt.lhs().symbol(*phiResultVarSymbol);
+
             continue;
         }
-
-        cout << "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" << endl;
-        cout << stmt << endl;
 
         for (Iterator<Expression> inRefIter = stmt.in_refs(); inRefIter.valid(); ++inRefIter) {
             Expression& inRefExpr = inRefIter.current();
@@ -475,8 +511,6 @@ void variable_renaming_helper(
 
     // Iterate each successor in the CFG
     for (int succIdx = 0; succIdx < bb->successors.entries(); succIdx++) {
-
-        cout << "IN A SUCC!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << endl;
         BasicBlock& succBB = bb->successors[succIdx];
 
         for (int stmtIdx = 0; stmtIdx < succBB.stmts.entries(); stmtIdx++) {
@@ -543,11 +577,6 @@ void rename_variables(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {
 
 void ssa(ProgramUnit & pgm, List<BasicBlock>* basicBlocks)
 {
-    for (Iterator<BasicBlock> bbIter = *basicBlocks; bbIter.valid(); ++bbIter) {
-        BasicBlock& bb = bbIter.current();
-
-//        cout << bb << endl;
-    }
     compute_dominance(pgm, basicBlocks);
     generate_phi_stmts(pgm, basicBlocks);
     rename_variables(pgm, basicBlocks);
