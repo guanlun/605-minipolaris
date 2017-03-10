@@ -104,8 +104,6 @@ void compute_dominance(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {
             } else {
                 set_intersect(newDominators, predBB.dominators);
             }
-
-            predIdx++;
         }
 
         newDominators.insert(currNode);
@@ -139,6 +137,7 @@ void compute_dominance(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {
         }
 
         bb.immediateDominator = runner;
+        cout << bb.name << "'s immediate dominator is " << runner->name << endl;
     }
 
     for (Iterator<BasicBlock> bbIter = *basicBlocks; bbIter.valid(); ++bbIter) {
@@ -153,6 +152,8 @@ void compute_dominance(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {
                 BasicBlock& predBB = predBBs[predIdx];
 
                 BasicBlock* runner = &predBB;
+
+                cout << "pred bb: " << predBB.name << endl;
 
                 while (runner != bb.immediateDominator) {
                     runner->dominanceFrontiers.insert(&bb);
@@ -179,7 +180,6 @@ void compute_dominance(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {
 
 void find_function_helper(set<Expression*>& funcExprs, Expression& expr) {
     if (expr.op() == FUNCTION_CALL_OP) {
-//		funcExprs.ins_last(expr);
         funcExprs.insert(&expr);
     } else {
         for (Iterator<Expression> exprIter = expr.arg_list(); exprIter.valid(); ++exprIter) {
@@ -281,7 +281,6 @@ void generate_phi_stmts(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {
 
                     Symbol& phiAssignedSymbol = argExpr.symbol();
 
-//                    Expression* phiArgs = comma(argExpr.clone());
                     Expression* phiArgs = comma();
                     Expression* phiFuncExpr = function_call(phiFunc->clone(), phiArgs);
                     Expression* assignedExpr = new IDExpr(phiAssignedSymbol.type(), phiAssignedSymbol);
@@ -317,8 +316,6 @@ void generate_phi_stmts(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {
 
     for (Iterator<BasicBlock> bbIter = *basicBlocks; bbIter.valid(); ++bbIter) {
         BasicBlock& bb = bbIter.current();
-
-//        cout << bb << endl;
     }
 }
 
@@ -412,13 +409,11 @@ void variable_renaming_helper(
         return;
     }
 
-    /*
     for (int i = 0; i < depth; i++) {
         cout << "    ";
     }
 
     cout << "Now visited bb: " << bb->name << endl;
-    */
 
     visited.insert(bb);
 
@@ -536,6 +531,8 @@ void variable_renaming_helper(
     // Pop the stacks
     for (int stmtIdx = 0; stmtIdx < bb->stmts.entries(); stmtIdx++) {
         Statement& stmt = bb->stmts[stmtIdx];
+        cout << "-------------------------------------" << endl;
+        cout << bb->name << endl;
 
         for (Iterator<Expression> outRefMut = stmt.out_refs(); outRefMut.valid(); ++outRefMut) {
             Expression& outRefExpr = outRefMut.current();
@@ -547,10 +544,19 @@ void variable_renaming_helper(
 
             Symbol& outRefSymbol = outRefExpr.symbol();
 
-            map<Symbol*, vector<int> >::iterator vnIter = variableNumLookup.find(&outRefSymbol);
-            vector<int>& numStack = vnIter->second;
+            // Here we scan the entire map for the original symbol as we cannot lookup directly
+            // using the modified one.
+            for (map<Symbol*, vector<int> >::iterator vnIter = variableNumLookup.begin();
+                vnIter != variableNumLookup.end();
+                ++vnIter) {
+                Symbol* origSymbol = vnIter->first;
+                if (strcmp(origSymbol->name_ref(), orig_symbol_name(outRefSymbol)) == 0) {
+                    vector<int>& numStack = vnIter->second;
 
-            numStack.pop_back();
+                    numStack.pop_back();
+                    break;
+                }
+            }
         }
     }
 }
