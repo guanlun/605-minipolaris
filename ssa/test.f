@@ -3,6 +3,7 @@
         
         i = 1
         if ( i .EQ. 0 ) THEN
+          i = 2
           PRINT *, i
         ENDIF
 		PRINT *, i

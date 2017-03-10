@@ -225,8 +225,6 @@ void generate_phi_stmts(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {
                     workList.insert(dfNode);
                     added.insert(dfNode);
                 }
-
-//                cout << sym.tag_ref() << " is added to " << dfNode->name << endl;
             }
         }
     }
@@ -240,15 +238,6 @@ void generate_phi_stmts(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {
              phiIter != bb.phiSymbols.end();
              ++phiIter) {
             Symbol* phiSymbol = *phiIter;
-
-            /*
-            // Create placeholder argument list using constants
-            int predCount = bb.predecessors.entries();
-            List<Expression>* argList = new List<Expression>();
-            for (int predIdx = 0; predIdx < predCount; predIdx++) {
-                argList->ins_last(constant(0));
-            }
-            */
 
             Expression* args = comma();
             Expression* phiFuncExpr = function_call(phiFunc->clone(), args);
@@ -466,7 +455,46 @@ void ssa(ProgramUnit & pgm, List<BasicBlock>* basicBlocks)
     rename_variables(pgm, basicBlocks);
 }
 
+void restore_variable_name(Expression& expr) {
+    // TODO: Consider array later
+    if (expr.op() != ID_OP) {
+        return;
+    }
+
+    Symbol& outRefSymbol = expr.symbol();
+    const char* varName = outRefSymbol.name_ref();
+
+    if (strchr(varName, '@')) {
+        char* origName = orig_symbol_name(outRefSymbol);
+        Symbol* renamedSymbol = outRefSymbol.clone();
+        renamedSymbol->name(origName);
+
+        expr.symbol(*renamedSymbol);
+    }
+}
+
 void dessa(ProgramUnit & pgm)
 {
+    StmtList& stmts = pgm.stmts();
 
+    for (Iterator<Statement> stmtIter = stmts; stmtIter.valid(); ++stmtIter) {
+        Statement& stmt = stmtIter.current();
+
+        if (is_phi_stmt(stmt)) {
+            stmts.del(stmt);
+            continue;
+        }
+
+        for (Iterator<Expression> outRefIter = stmt.out_refs(); outRefIter.valid(); ++outRefIter) {
+            Expression& outRefExpr = outRefIter.current();
+
+            restore_variable_name(outRefExpr);
+        }
+
+        for (Iterator<Expression> inRefIter = stmt.in_refs(); inRefIter.valid(); ++inRefIter) {
+            Expression& inRefExpr = inRefIter.current();
+
+            restore_variable_name(inRefExpr);
+        }
+    }
 }
