@@ -9,6 +9,7 @@
 #include "SSAWorkSpace.h"
 #include "../bblock/BasicBlock.h"
 
+void transform_loops(ProgramUnit& pgm);
 void ssa(ProgramUnit & pgm, List<BasicBlock>* basicBlocks);
 void dessa(ProgramUnit & pgm);
 

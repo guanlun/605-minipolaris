@@ -173,6 +173,7 @@ driver(int argc, char *argv[])
     ///////////////////////////////////////
     
     if (switch_value("ssa")) {
+      transform_loops(pgm);
       pgm_basic_blocks = find_basic_blocks(pgm);
       ssa(pgm, pgm_basic_blocks);
       

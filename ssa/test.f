@@ -1,12 +1,7 @@
-        PROGRAM TEST4
-        INTEGER*4 i,j
+        PROGRAM TEST15
+        INTEGER*4 i,j,k,l
         
-        i = 1
-        if ( i .EQ. 0 ) THEN
-          i = 2
-          PRINT *, i
-        ENDIF
-		PRINT *, i
+        j = foo(j,k)
+        print *,j
         STOP
         END
-

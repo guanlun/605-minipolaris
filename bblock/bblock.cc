@@ -87,6 +87,9 @@ List<BasicBlock>	  * find_basic_blocks(ProgramUnit & pgm)
         }
 
         bb->add_statement(currStmt);
+        while (currStmt.work_stack().entries() != 0) {
+            currStmt.work_stack().pop(1);
+        }
         currStmt.work_stack().push(new BasicBlockWork(1, bb));
 
         if (is_end_of_bb(currStmt)) {
@@ -101,7 +104,7 @@ List<BasicBlock>	  * find_basic_blocks(ProgramUnit & pgm)
         ++iter) {
         BasicBlock& currBlk = iter.current();
 
-        currBlk.insert_bb_comment();
+//        currBlk.insert_bb_comment();
         currBlk.build_pred_succ_relation();
     }
 

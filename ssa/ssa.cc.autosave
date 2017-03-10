@@ -7,11 +7,8 @@
 #include "Collection/List.h"
 #include "Statement/Statement.h"
 #include "Statement/AssignmentStmt.h"
-#include "Statement/GotoStmt.h"
-#include "Statement/LabelStmt.h"
 #include "Expression/FunctionCallExpr.h"
 #include "Expression/IDExpr.h"
-#include "Expression/BinaryExpr.h"
 #include "Expression/expr_funcs.h"
 #include "Symbol/VariableSymbol.h"
 
@@ -60,20 +57,6 @@ bool is_phi_stmt(Statement& stmt) {
     const Expression& func = rhs.function();
 
     return (strcmp(func.symbol().name_ref(), "PHI") == 0);
-}
-
-bool is_phi_stmt_for_function(Statement& stmt) {
-    if (!is_phi_stmt(stmt)) {
-        return false;
-    }
-
-    SSAWorkSpace* ws = (SSAWorkSpace*)stmt.work_stack().top_ref(PASS_TAG);
-
-    if (!ws) {
-        return false;
-    }
-
-    return ws->isPhiForFunction;
 }
 
 void compute_dominance(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {
@@ -177,31 +160,6 @@ void compute_dominance(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {
     }
 }
 
-void find_function_helper(set<Expression*>& funcExprs, Expression& expr) {
-    if (expr.op() == FUNCTION_CALL_OP) {
-//		funcExprs.ins_last(expr);
-        funcExprs.insert(&expr);
-    } else {
-        for (Iterator<Expression> exprIter = expr.arg_list(); exprIter.valid(); ++exprIter) {
-            find_function_helper(funcExprs, exprIter.current());
-        }
-    }
-}
-
-set<Expression*> find_functions(Statement& stmt) {
-    set<Expression*> exprList;
-
-    for (Iterator<Expression> exprIter = stmt.iterate_all_expressions();
-        exprIter.valid();
-        ++exprIter) {
-        Expression& expr = exprIter.current();
-
-        find_function_helper(exprList, expr);
-    }
-
-    return exprList;
-}
-
 void generate_phi_stmts(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {
     StmtList& stmts = pgm.stmts();
 
@@ -250,51 +208,10 @@ void generate_phi_stmts(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {
     }
 
     Expression* phiFunc = new_function("PHI", make_type(INTEGER_TYPE, 4), pgm);
-
-    // Insert PHI statements after function calls for each of the arguments
-    /*
-    for (Iterator<BasicBlock> bbIter = *basicBlocks; bbIter.valid(); ++bbIter) {
-        BasicBlock& bb = bbIter.current();
-
-        for (int stmtIdx = 0; stmtIdx < bb.stmts.entries(); stmtIdx++) {
-            Statement& stmt = bb.stmts[stmtIdx];
-
-            if (is_phi_stmt(stmt)) {
-                continue;
-            }
-
-            set<Expression*> functionCallExprs = find_functions(stmt);
-
-            for (set<Expression*>::iterator funcExprIter = functionCallExprs.begin();
-                funcExprIter != functionCallExprs.end();
-                ++funcExprIter) {
-                Expression* funcExpr = *funcExprIter;
-
-                Expression& argsCommaExpr = funcExpr->parameters_guarded();
-
-                for (Iterator<Expression> argIter = argsCommaExpr.arg_list(); argIter.valid(); ++argIter) {
-                    Expression& argExpr = argIter.current();
-
-                    if (argExpr.op() != ID_OP) {
-                        continue;
-                    }
-
-                    Symbol& phiAssignedSymbol = argExpr.symbol();
-
-                    Expression* phiArgs = comma(argExpr.clone());
-                    Expression* phiFuncExpr = function_call(phiFunc->clone(), phiArgs);
-                    Expression* assignedExpr = new IDExpr(phiAssignedSymbol.type(), *phiAssignedSymbol.clone());
-
-                    Statement* phiStmt = new AssignmentStmt(stmts.new_tag(), assignedExpr, phiFuncExpr);
-                    phiStmt->work_stack().push(new SSAWorkSpace(PASS_TAG, true));
-
-                    stmts.ins_after(phiStmt, &stmt);
-                    bb.stmts.ins_after(*phiStmt, stmt);
-                }
-            }
-        }
+    
+    for (Iterator<Statement> stmtIter = stmts; stmtIter.valid(); ++stmtIter) {
+        
     }
-    */
 
     for (Iterator<BasicBlock> bbIter = *basicBlocks; bbIter.valid(); ++bbIter) {
         BasicBlock& bb = bbIter.current();
@@ -412,17 +329,8 @@ void variable_renaming_helper(
     for (int stmtIdx = 0; stmtIdx < bb->stmts.entries(); stmtIdx++) {
         Statement& stmt = bb->stmts[stmtIdx];
 
-        if (is_phi_stmt_for_function(stmt)) {
-            continue;
-        }
-
-        cout << "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" << endl;
-        cout << stmt << endl;
-
         for (Iterator<Expression> inRefIter = stmt.in_refs(); inRefIter.valid(); ++inRefIter) {
             Expression& inRefExpr = inRefIter.current();
-
-            cout << inRefExpr << endl;
 
             // TODO: Consider array later
             if (inRefExpr.op() != ID_OP) {
@@ -441,27 +349,10 @@ void variable_renaming_helper(
         for (Iterator<Expression> outRefMut = stmt.out_refs(); outRefMut.valid(); ++outRefMut) {
             Expression& outRefExpr = outRefMut.current();
 
-            // Check whether an out-ref is also an in-ref (which occurs for function parameters)
-            bool isAlreadyInRef = false;
-            for (Iterator<Expression> inRefIter = stmt.in_refs(); inRefIter.valid(); ++inRefIter) {
-                Expression& inRefExpr = inRefIter.current();
-
-                if (&inRefExpr == &outRefExpr) {
-                    isAlreadyInRef = true;
-                    break;
-                }
-            }
-
-            if (isAlreadyInRef) {
-                continue;
-            }
-
             // TODO: Consider array later
             if (outRefExpr.op() != ID_OP) {
                 continue;
             }
-
-            cout << "out ref expr: " << outRefExpr << endl;
 
             Symbol& outRefSymbol = outRefExpr.symbol();
             const char* newVarName = new_name(&outRefSymbol, variableNumLookup, counter);
@@ -475,9 +366,9 @@ void variable_renaming_helper(
 
     // Iterate each successor in the CFG
     for (int succIdx = 0; succIdx < bb->successors.entries(); succIdx++) {
-
-        cout << "IN A SUCC!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << endl;
         BasicBlock& succBB = bb->successors[succIdx];
+
+//        cout << "in succ " << succBB.name << " with phi #: " << succBB.phiSymbols.size() << endl;
 
         for (int stmtIdx = 0; stmtIdx < succBB.stmts.entries(); stmtIdx++) {
             Statement& stmt = succBB.stmts[stmtIdx];
@@ -543,56 +434,9 @@ void rename_variables(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {
 
 void ssa(ProgramUnit & pgm, List<BasicBlock>* basicBlocks)
 {
-    for (Iterator<BasicBlock> bbIter = *basicBlocks; bbIter.valid(); ++bbIter) {
-        BasicBlock& bb = bbIter.current();
-
-//        cout << bb << endl;
-    }
     compute_dominance(pgm, basicBlocks);
     generate_phi_stmts(pgm, basicBlocks);
     rename_variables(pgm, basicBlocks);
-}
-
-void transform_loops(ProgramUnit& pgm) {
-    return;
-    StmtList& stmts = pgm.stmts();
-
-    cout << "++++++++++++++++++++++++++++++++++++  Transforming loops +++++++++++++++++++++++++++++++++++++" << endl;
-
-    for (Iterator<Statement> stmtIter = stmts.stmts_of_type(DO_STMT); stmtIter.valid(); ++stmtIter) {
-        Statement& doStmt = stmtIter.current();
-        Statement& endDoStmt = *doStmt.follow_ref();
-
-        Expression& indexVar = doStmt.index();
-        Expression& initVal = doStmt.init();
-        Expression& limitVal = doStmt.limit();
-
-        Statement* initStmt = new AssignmentStmt(stmts.new_tag(), indexVar.clone(), initVal.clone());
-        Expression* limitPredicate = new BinaryExpr(GT_OP,
-            expr_type(GT_OP, indexVar.type(), limitVal.type()),
-            indexVar.clone(),
-            limitVal.clone()
-        );
-
-        Statement& ifStmt = stmts.ins_IF_after(limitPredicate, doStmt.prev_ref());
-        stmts.ins_after(initStmt, doStmt.prev_ref());
-
-        Statement* endLoopLabelStmt = new LabelStmt(stmts.new_tag(), stmts.new_label());
-        stmts.ins_after(endLoopLabelStmt, &endDoStmt);
-
-        Statement* endLoopGotoStmt = new GotoStmt(stmts.new_tag(), endLoopLabelStmt);
-        stmts.ins_after(endLoopGotoStmt, &ifStmt);
-
-//        stmts.ins_after(stmts.grab(doStmt, endDoStmt), &ifStmt);
-
-        stmts.del(doStmt);
-    }
-
-    for (Iterator<Statement> stmtIter = stmts; stmtIter.valid(); ++stmtIter) {
-        stmtIter.current().build_refs();
-    }
-
-    cout << stmts << endl;
 }
 
 void restore_variable_name(Expression& expr) {
