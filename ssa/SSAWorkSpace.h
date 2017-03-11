@@ -12,6 +12,7 @@ public:
 	Listable *listable_clone() const { return NULL; };
 
 	INLINE void print(ostream &o) const {
+        cout << "SSAWorkSpace" << endl;
     };
 
 	INLINE int structures_OK() const { return 1; };

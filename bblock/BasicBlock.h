@@ -72,6 +72,7 @@ public:
     set<BasicBlock*> dominators;
     BasicBlock* immediateDominator;
     set<BasicBlock*> dominanceFrontiers;
+    set<BasicBlock*> reverseDFs;
     set<BasicBlock*> dominants;
     set<Symbol*> phiSymbols;
 
@@ -222,11 +223,11 @@ BasicBlock::print(ostream &o) const
 //        o << dom->name << endl;
 //    }
 
-    o << "--------------dominance frontiers: ";
-    for (set<BasicBlock*>::iterator domIter = dominanceFrontiers.begin(); domIter != dominanceFrontiers.end(); ++domIter) {
-        BasicBlock* dom = *domIter;
-        o << dom->name << ", ";
-    }
+//    o << "--------------dominance frontiers: ";
+//    for (set<BasicBlock*>::iterator domIter = dominanceFrontiers.begin(); domIter != dominanceFrontiers.end(); ++domIter) {
+//        BasicBlock* dom = *domIter;
+//        o << dom->name << ", ";
+//    }
 
     /*
     for (set<Symbol*>::iterator symIter = phiSymbols.begin(); symIter != phiSymbols.end(); ++symIter) {

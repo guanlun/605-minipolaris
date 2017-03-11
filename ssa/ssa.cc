@@ -7,8 +7,6 @@
 #include "Collection/List.h"
 #include "Statement/Statement.h"
 #include "Statement/AssignmentStmt.h"
-#include "Statement/GotoStmt.h"
-#include "Statement/LabelStmt.h"
 #include "Expression/FunctionCallExpr.h"
 #include "Expression/IDExpr.h"
 #include "Expression/BinaryExpr.h"
@@ -44,6 +42,22 @@ bool set_equal(set<T>& s1, set<T>& s2) {
     }
 
     return true;
+}
+
+bool is_upsilon_stmt(Statement& stmt) {
+    if (stmt.stmt_class() != ASSIGNMENT_STMT) {
+        return false;
+    }
+
+    const Expression& rhs = stmt.rhs();
+
+    if (rhs.op() != FUNCTION_CALL_OP) {
+        return false;
+    }
+
+    const Expression& func = rhs.function();
+
+    return (strcmp(func.symbol().name_ref(), "UPSILON") == 0);
 }
 
 bool is_phi_stmt(Statement& stmt) {
@@ -143,10 +157,7 @@ void compute_dominance(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {
 
     for (Iterator<BasicBlock> bbIter = *basicBlocks; bbIter.valid(); ++bbIter) {
         BasicBlock& bb = bbIter.current();
-
         RefList<BasicBlock&>& predBBs = bb.predecessors;
-
-        cout << "bb: " << bb.name << endl;
 
         if (predBBs.entries() >= 2) {
             // Only a merge-point could be a dominance frontier of other nodes
@@ -156,8 +167,9 @@ void compute_dominance(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {
 
                 BasicBlock* runner = &predBB;
 
-                while (runner != NULL && runner != bb.immediateDominator) {
+                while ((runner != NULL) && (runner != bb.immediateDominator)) {
                     runner->dominanceFrontiers.insert(&bb);
+                    bb.reverseDFs.insert(runner);
                     runner = runner->immediateDominator;
                 }
             }
@@ -172,11 +184,11 @@ void compute_dominance(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {
         }
     }
 
-    for (Iterator<BasicBlock> bbIter = *basicBlocks; bbIter.valid(); ++bbIter) {
-        BasicBlock& bb = bbIter.current();
+//    for (Iterator<BasicBlock> bbIter = *basicBlocks; bbIter.valid(); ++bbIter) {
+//        BasicBlock& bb = bbIter.current();
 
-        cout << bb << endl;
-    }
+//        cout << bb << endl;
+//    }
 }
 
 void find_function_helper(set<Expression*>& funcExprs, Expression& expr) {
@@ -227,6 +239,56 @@ void build_phi_for_function(
 
         stmts.ins_after(phiStmt, &stmt);
         bb.stmts.ins_after(*phiStmt, stmt);
+    }
+}
+
+void generate_upsilon_stmts(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {
+    Expression* upsilonFunc = new_function("UPSILON", make_type(INTEGER_TYPE, 4), pgm);
+
+    StmtList& stmts = pgm.stmts();
+
+    map<Statement*, Statement*> toBeInserted;
+
+    for (Iterator<BasicBlock> bbIter = *basicBlocks; bbIter.valid(); ++bbIter) {
+        BasicBlock& bb = bbIter.current();
+
+        for (int stmtIdx = 0; stmtIdx < bb.stmts.entries(); stmtIdx++) {
+            Statement& stmt = bb.stmts[stmtIdx];
+
+            if (is_phi_stmt(stmt) && !is_phi_stmt_for_function(stmt)) {
+                Expression& assignedPhiExpr = stmt.lhs();
+                Expression& phiFuncArgs = stmt.rhs().parameters_guarded();
+
+                for (Iterator<Statement> rStmtIter = stmts; rStmtIter.valid(); ++rStmtIter) {
+                    Statement& rStmt = rStmtIter.current();
+
+                    for (Iterator<Expression> outRefIter = rStmt.out_refs(); outRefIter.valid(); ++outRefIter) {
+                        Expression& outRefExpr = outRefIter.current();
+                        for (Iterator<Expression> argIter = phiFuncArgs.arg_list(); argIter.valid(); ++argIter) {
+                            Expression& argExpr = argIter.current();
+
+                            if (outRefExpr == argExpr) {
+                                Symbol& assignedSymbol = outRefExpr.symbol();
+
+                                Expression* upsilonArgs = comma(assignedPhiExpr.clone());
+                                Expression* upsilonFuncExpr = function_call(upsilonFunc->clone(), upsilonArgs);
+                                Expression* assignedExpr = new IDExpr(assignedSymbol.type(), assignedSymbol);
+
+                                Statement* upsilonStmt = new AssignmentStmt(stmts.new_tag(), assignedExpr, upsilonFuncExpr);
+
+                                toBeInserted.insert(pair<Statement*, Statement*>(upsilonStmt, &rStmt));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    for (map<Statement*, Statement*>::iterator insertIter = toBeInserted.begin();
+        insertIter != toBeInserted.end();
+        ++insertIter) {
+        stmts.ins_after(insertIter->first, insertIter->second);
     }
 }
 
@@ -292,7 +354,7 @@ void generate_phi_stmts(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {
             Statement& stmt = bb.stmts[stmtIdx];
 
             if (is_phi_stmt(stmt)) {
-                // Already a PHI statement, ignore this stmt
+                // Already a PHI/UPSILON statement, ignore this stmt
                 continue;
             }
 
@@ -316,8 +378,8 @@ void generate_phi_stmts(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {
         BasicBlock& bb = bbIter.current();
 
         for (set<Symbol*>::iterator phiIter = bb.phiSymbols.begin();
-             phiIter != bb.phiSymbols.end();
-             ++phiIter) {
+            phiIter != bb.phiSymbols.end();
+            ++phiIter) {
             Symbol* phiSymbol = *phiIter;
 
             Expression* args = comma();
@@ -331,9 +393,9 @@ void generate_phi_stmts(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {
         }
     }
 
-    for (Iterator<BasicBlock> bbIter = *basicBlocks; bbIter.valid(); ++bbIter) {
-        BasicBlock& bb = bbIter.current();
-    }
+//    for (Iterator<BasicBlock> bbIter = *basicBlocks; bbIter.valid(); ++bbIter) {
+//        BasicBlock& bb = bbIter.current();
+//    }
 }
 
 const char* new_name(Symbol* sym, map<Symbol*, vector<int> >& variableNumLookup, map<Symbol*, int>& counter) {
@@ -446,12 +508,6 @@ void variable_renaming_helper(
         return;
     }
 
-    for (int i = 0; i < depth; i++) {
-        cout << "    ";
-    }
-
-    cout << "Now visited bb: " << bb->name << endl;
-
     visited.insert(bb);
 
     for (int stmtIdx = 0; stmtIdx < bb->stmts.entries(); stmtIdx++) {
@@ -487,9 +543,6 @@ void variable_renaming_helper(
         for (Iterator<Expression> inRefIter = stmt.in_refs(); inRefIter.valid(); ++inRefIter) {
             Expression& inRefExpr = inRefIter.current();
 
-            cout << inRefExpr << endl;
-
-            // TODO: Consider array later
             if (inRefExpr.op() != ID_OP) {
                 continue;
             }
@@ -521,7 +574,6 @@ void variable_renaming_helper(
                 continue;
             }
 
-            // TODO: Consider array later
             if (outRefExpr.op() != ID_OP) {
                 continue;
             }
@@ -567,7 +619,6 @@ void variable_renaming_helper(
         for (Iterator<Expression> outRefMut = stmt.out_refs(); outRefMut.valid(); ++outRefMut) {
             Expression& outRefExpr = outRefMut.current();
 
-            // TODO: Consider array later
             if (outRefExpr.op() != ID_OP) {
                 continue;
             }
@@ -614,12 +665,11 @@ void ssa(ProgramUnit & pgm, List<BasicBlock>* basicBlocks)
 {
     compute_dominance(pgm, basicBlocks);
     generate_phi_stmts(pgm, basicBlocks);
-
     rename_variables(pgm, basicBlocks);
+    generate_upsilon_stmts(pgm, basicBlocks);
 }
 
 void restore_variable_name(Expression& expr) {
-    // TODO: Consider array later
     if (expr.op() != ID_OP) {
         return;
     }
@@ -643,7 +693,7 @@ void dessa(ProgramUnit & pgm)
     for (Iterator<Statement> stmtIter = stmts; stmtIter.valid(); ++stmtIter) {
         Statement& stmt = stmtIter.current();
 
-        if (is_phi_stmt(stmt)) {
+        if (is_phi_stmt(stmt) || is_upsilon_stmt(stmt)) {
             stmts.del(stmt);
             continue;
         }
