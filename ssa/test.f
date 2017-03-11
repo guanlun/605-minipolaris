@@ -1,16 +1,14 @@
-        PROGRAM TEST7
+        PROGRAM TEST5
         INTEGER*4 i,j
         
         i = 1
         if ( i .EQ. 0 ) THEN
-          i = 1
-        else if (i .EQ. 1) then
-          i = 4
+          j = 1
+        ELSE
+          i = j
           j = 2
-        else
-          i = 3
         ENDIF
-        PRINT *, j,i
+        PRINT *, j
         STOP
         END
 
