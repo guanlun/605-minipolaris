@@ -250,6 +250,11 @@ void generate_phi_stmts(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {
                 }
 
                 Expression& outExpr = outIter.current();
+
+                if (outExpr.op() != ID_OP) {
+                    continue;
+                }
+
                 Symbol& assignee = outExpr.symbol();
 
                 if (&assignee == &sym) {
@@ -302,28 +307,6 @@ void generate_phi_stmts(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {
                     Expression* funcExpr = *funcExprIter;
 
                     build_phi_for_function(funcExpr->parameters_guarded(), phiFunc, stmts, stmt, bb);
-
-                    /*
-                    for (Iterator<Expression> argIter = argsCommaExpr.arg_list(); argIter.valid(); ++argIter) {
-                        Expression& argExpr = argIter.current();
-
-                        if (argExpr.op() != ID_OP) {
-                            continue;
-                        }
-
-                        Symbol& phiAssignedSymbol = argExpr.symbol();
-
-                        Expression* phiArgs = comma();
-                        Expression* phiFuncExpr = function_call(phiFunc->clone(), phiArgs);
-                        Expression* assignedExpr = new IDExpr(phiAssignedSymbol.type(), phiAssignedSymbol);
-
-                        Statement* phiStmt = new AssignmentStmt(stmts.new_tag(), assignedExpr, phiFuncExpr);
-                        phiStmt->work_stack().push(new SSAWorkSpace(PASS_TAG, true));
-
-                        stmts.ins_after(phiStmt, &stmt);
-                        bb.stmts.ins_after(*phiStmt, stmt);
-                    }
-                    */
                 }
             }
         }
