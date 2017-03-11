@@ -1,19 +1,16 @@
-        PROGRAM TEST19
-        INTEGER*4 i,j,k,l
-
-        i = 1;
-        if ( i .EQ. 0) THEN
-          if (j .EQ. 0) THEN
-            goto 10
-          endif
-          if ( i .EQ. 2) THEN
-          goto 10
-          endif
-        endif
-        i = 3
- 10     i = 21   
-        print *,i
+        PROGRAM TEST7
+        INTEGER*4 i,j
+        
+        i = 1
+        if ( i .EQ. 0 ) THEN
+          i = 1
+        else if (i .EQ. 1) then
+          i = 4
+          j = 2
+        else
+          i = 3
+        ENDIF
+        PRINT *, j,i
         STOP
         END
-
 

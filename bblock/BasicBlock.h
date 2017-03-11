@@ -72,7 +72,6 @@ public:
     set<BasicBlock*> dominators;
     BasicBlock* immediateDominator;
     set<BasicBlock*> dominanceFrontiers;
-    set<BasicBlock*> reverseDFs;
     set<BasicBlock*> dominants;
     set<Symbol*> phiSymbols;
 
