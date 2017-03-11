@@ -217,16 +217,16 @@ BasicBlock::print(ostream &o) const
 //    if (immediateDominator != NULL) {
 //    	o << "Immediate dominator: " << immediateDominator->name << endl;
 //    }
-    for (set<BasicBlock*>::iterator domIter = dominators.begin(); domIter != dominators.end(); ++domIter) {
-        BasicBlock* dom = *domIter;
-        o << dom->name << endl;
-    }
+//    for (set<BasicBlock*>::iterator domIter = dominators.begin(); domIter != dominators.end(); ++domIter) {
+//        BasicBlock* dom = *domIter;
+//        o << dom->name << endl;
+//    }
 
-//    o << "--------------dominance frontiers: ";
-//	for (set<BasicBlock*>::iterator domIter = dominanceFrontiers.begin(); domIter != dominanceFrontiers.end(); ++domIter) {
-//		BasicBlock* dom = *domIter;
-//		o << dom->name << ", ";
-//	}
+    o << "--------------dominance frontiers: ";
+    for (set<BasicBlock*>::iterator domIter = dominanceFrontiers.begin(); domIter != dominanceFrontiers.end(); ++domIter) {
+        BasicBlock* dom = *domIter;
+        o << dom->name << ", ";
+    }
 
     /*
     for (set<Symbol*>::iterator symIter = phiSymbols.begin(); symIter != phiSymbols.end(); ++symIter) {

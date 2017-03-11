@@ -1,13 +1,10 @@
-        PROGRAM TEST15
+       PROGRAM TEST19
         INTEGER*4 i,j,k,l
-        
-        k = 4
-        IF (i.EQ.j) THEN
-          k = 2
-        ELSE
-          j = k
-          k = 3
-        ENDIF
-        print j,k
+
+        i = 1;
+        call FOO(i,j,k)
+        print *,i
         STOP
         END
+
+

@@ -136,14 +136,17 @@ void compute_dominance(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {
             }
         }
 
-        bb.immediateDominator = runner;
-        cout << bb.name << "'s immediate dominator is " << runner->name << endl;
+        if (&bb != runner) {
+            bb.immediateDominator = runner;
+        }
     }
 
     for (Iterator<BasicBlock> bbIter = *basicBlocks; bbIter.valid(); ++bbIter) {
         BasicBlock& bb = bbIter.current();
 
         RefList<BasicBlock&>& predBBs = bb.predecessors;
+
+        cout << "bb: " << bb.name << endl;
 
         if (predBBs.entries() >= 2) {
             // Only a merge-point could be a dominance frontier of other nodes
@@ -153,9 +156,7 @@ void compute_dominance(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {
 
                 BasicBlock* runner = &predBB;
 
-                cout << "pred bb: " << predBB.name << endl;
-
-                while (runner != bb.immediateDominator) {
+                while (runner != NULL && runner != bb.immediateDominator) {
                     runner->dominanceFrontiers.insert(&bb);
                     runner = runner->immediateDominator;
                 }
@@ -179,7 +180,7 @@ void compute_dominance(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {
 }
 
 void find_function_helper(set<Expression*>& funcExprs, Expression& expr) {
-    if (expr.op() == FUNCTION_CALL_OP) {
+    if (expr.op() == FUNCTION_CALL_OP || expr.op() == SUB_OP) {
         funcExprs.insert(&expr);
     } else {
         for (Iterator<Expression> exprIter = expr.arg_list(); exprIter.valid(); ++exprIter) {
@@ -200,6 +201,33 @@ set<Expression*> find_functions(Statement& stmt) {
     }
 
     return exprList;
+}
+
+void build_phi_for_function(
+    Expression& argsCommaExpr,
+    Expression* phiFunc,
+    StmtList& stmts,
+    Statement& stmt,
+    BasicBlock& bb) {
+    for (Iterator<Expression> argIter = argsCommaExpr.arg_list(); argIter.valid(); ++argIter) {
+        Expression& argExpr = argIter.current();
+
+        if (argExpr.op() != ID_OP) {
+            continue;
+        }
+
+        Symbol& phiAssignedSymbol = argExpr.symbol();
+
+        Expression* phiArgs = comma();
+        Expression* phiFuncExpr = function_call(phiFunc->clone(), phiArgs);
+        Expression* assignedExpr = new IDExpr(phiAssignedSymbol.type(), phiAssignedSymbol);
+
+        Statement* phiStmt = new AssignmentStmt(stmts.new_tag(), assignedExpr, phiFuncExpr);
+        phiStmt->work_stack().push(new SSAWorkSpace(PASS_TAG, true));
+
+        stmts.ins_after(phiStmt, &stmt);
+        bb.stmts.ins_after(*phiStmt, stmt);
+    }
 }
 
 void generate_phi_stmts(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {
@@ -263,33 +291,39 @@ void generate_phi_stmts(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {
                 continue;
             }
 
-            set<Expression*> functionCallExprs = find_functions(stmt);
+            if (stmt.stmt_class() == CALL_STMT) {
+                build_phi_for_function(stmt.parameters_guarded(), phiFunc, stmts, stmt, bb);
+            } else {
+                set<Expression*> functionCallExprs = find_functions(stmt);
 
-            for (set<Expression*>::iterator funcExprIter = functionCallExprs.begin();
-                funcExprIter != functionCallExprs.end();
-                ++funcExprIter) {
-                Expression* funcExpr = *funcExprIter;
+                for (set<Expression*>::iterator funcExprIter = functionCallExprs.begin();
+                    funcExprIter != functionCallExprs.end();
+                    ++funcExprIter) {
+                    Expression* funcExpr = *funcExprIter;
 
-                Expression& argsCommaExpr = funcExpr->parameters_guarded();
+                    build_phi_for_function(funcExpr->parameters_guarded(), phiFunc, stmts, stmt, bb);
 
-                for (Iterator<Expression> argIter = argsCommaExpr.arg_list(); argIter.valid(); ++argIter) {
-                    Expression& argExpr = argIter.current();
+                    /*
+                    for (Iterator<Expression> argIter = argsCommaExpr.arg_list(); argIter.valid(); ++argIter) {
+                        Expression& argExpr = argIter.current();
 
-                    if (argExpr.op() != ID_OP) {
-                        continue;
+                        if (argExpr.op() != ID_OP) {
+                            continue;
+                        }
+
+                        Symbol& phiAssignedSymbol = argExpr.symbol();
+
+                        Expression* phiArgs = comma();
+                        Expression* phiFuncExpr = function_call(phiFunc->clone(), phiArgs);
+                        Expression* assignedExpr = new IDExpr(phiAssignedSymbol.type(), phiAssignedSymbol);
+
+                        Statement* phiStmt = new AssignmentStmt(stmts.new_tag(), assignedExpr, phiFuncExpr);
+                        phiStmt->work_stack().push(new SSAWorkSpace(PASS_TAG, true));
+
+                        stmts.ins_after(phiStmt, &stmt);
+                        bb.stmts.ins_after(*phiStmt, stmt);
                     }
-
-                    Symbol& phiAssignedSymbol = argExpr.symbol();
-
-                    Expression* phiArgs = comma();
-                    Expression* phiFuncExpr = function_call(phiFunc->clone(), phiArgs);
-                    Expression* assignedExpr = new IDExpr(phiAssignedSymbol.type(), phiAssignedSymbol);
-
-                    Statement* phiStmt = new AssignmentStmt(stmts.new_tag(), assignedExpr, phiFuncExpr);
-                    phiStmt->work_stack().push(new SSAWorkSpace(PASS_TAG, true));
-
-                    stmts.ins_after(phiStmt, &stmt);
-                    bb.stmts.ins_after(*phiStmt, stmt);
+                    */
                 }
             }
         }
@@ -373,6 +407,11 @@ char* orig_symbol_name(Symbol& symbol) {
 }
 
 void populate_phi_args(Statement& phiStmt, map<Symbol*, vector<int> >& variableNumLookup) {
+    if (is_phi_stmt_for_function(phiStmt)) {
+        // No need to populate phi statements for function again
+        return;
+    }
+
     Expression& lhs = phiStmt.lhs();
     Symbol& phiSymbol = lhs.symbol();
 
@@ -392,7 +431,22 @@ void populate_phi_args(Statement& phiStmt, map<Symbol*, vector<int> >& variableN
             phiArgSymbol->name(phiArgName);
 
             Expression* argExpr = new IDExpr(phiArgSymbol->type(), *phiArgSymbol);
-            phiParams.arg_list().ins_last(argExpr);
+
+            bool alreadyInserted = false;
+            for (Iterator<Expression> currArgIter = phiParams.arg_list();
+                currArgIter.valid();
+                ++currArgIter) {
+                Expression& currArgExpr = currArgIter.current();
+
+                if (currArgExpr == (*argExpr)) {
+                    alreadyInserted = true;
+                    break;
+                }
+            }
+
+            if (!alreadyInserted) {
+                phiParams.arg_list().ins_last(argExpr);
+            }
         }
     }
 }
@@ -421,9 +475,6 @@ void variable_renaming_helper(
         Statement& stmt = bb->stmts[stmtIdx];
 
         if (is_phi_stmt_for_function(stmt)) {
-            cout << "Function PHI STMT: ------------------------------" << endl;
-            cout << stmt << endl;
-
             Symbol& assignedSymbol = stmt.lhs().symbol();
 
             Expression& phiFuncExpr = stmt.rhs();
@@ -492,8 +543,6 @@ void variable_renaming_helper(
                 continue;
             }
 
-            cout << "out ref expr: " << outRefExpr << endl;
-
             Symbol& outRefSymbol = outRefExpr.symbol();
             const char* newVarName = new_name(&outRefSymbol, variableNumLookup, counter);
 
@@ -531,8 +580,6 @@ void variable_renaming_helper(
     // Pop the stacks
     for (int stmtIdx = 0; stmtIdx < bb->stmts.entries(); stmtIdx++) {
         Statement& stmt = bb->stmts[stmtIdx];
-        cout << "-------------------------------------" << endl;
-        cout << bb->name << endl;
 
         for (Iterator<Expression> outRefMut = stmt.out_refs(); outRefMut.valid(); ++outRefMut) {
             Expression& outRefExpr = outRefMut.current();
@@ -545,7 +592,6 @@ void variable_renaming_helper(
             Symbol& outRefSymbol = outRefExpr.symbol();
 
             // Here we scan the entire map for the original symbol as we cannot lookup directly
-            // using the modified one.
             for (map<Symbol*, vector<int> >::iterator vnIter = variableNumLookup.begin();
                 vnIter != variableNumLookup.end();
                 ++vnIter) {
@@ -585,49 +631,8 @@ void ssa(ProgramUnit & pgm, List<BasicBlock>* basicBlocks)
 {
     compute_dominance(pgm, basicBlocks);
     generate_phi_stmts(pgm, basicBlocks);
+
     rename_variables(pgm, basicBlocks);
-}
-
-void transform_loops(ProgramUnit& pgm) {
-    return;
-    StmtList& stmts = pgm.stmts();
-
-    cout << "++++++++++++++++++++++++++++++++++++  Transforming loops +++++++++++++++++++++++++++++++++++++" << endl;
-
-    for (Iterator<Statement> stmtIter = stmts.stmts_of_type(DO_STMT); stmtIter.valid(); ++stmtIter) {
-        Statement& doStmt = stmtIter.current();
-        Statement& endDoStmt = *doStmt.follow_ref();
-
-        Expression& indexVar = doStmt.index();
-        Expression& initVal = doStmt.init();
-        Expression& limitVal = doStmt.limit();
-
-        Statement* initStmt = new AssignmentStmt(stmts.new_tag(), indexVar.clone(), initVal.clone());
-        Expression* limitPredicate = new BinaryExpr(GT_OP,
-            expr_type(GT_OP, indexVar.type(), limitVal.type()),
-            indexVar.clone(),
-            limitVal.clone()
-        );
-
-        Statement& ifStmt = stmts.ins_IF_after(limitPredicate, doStmt.prev_ref());
-        stmts.ins_after(initStmt, doStmt.prev_ref());
-
-        Statement* endLoopLabelStmt = new LabelStmt(stmts.new_tag(), stmts.new_label());
-        stmts.ins_after(endLoopLabelStmt, &endDoStmt);
-
-        Statement* endLoopGotoStmt = new GotoStmt(stmts.new_tag(), endLoopLabelStmt);
-        stmts.ins_after(endLoopGotoStmt, &ifStmt);
-
-//        stmts.ins_after(stmts.grab(doStmt, endDoStmt), &ifStmt);
-
-        stmts.del(doStmt);
-    }
-
-    for (Iterator<Statement> stmtIter = stmts; stmtIter.valid(); ++stmtIter) {
-        stmtIter.current().build_refs();
-    }
-
-    cout << stmts << endl;
 }
 
 void restore_variable_name(Expression& expr) {
