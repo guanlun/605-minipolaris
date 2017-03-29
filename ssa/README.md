@@ -1,5 +1,7 @@
 Since the SSA algorithm is based on basic blocks, I’ve modified driver.cc to pass the basic blocks to it. Therefore I’ve submitted the entire project folder.
 
+Notes that the basic block pass must be executed before this pass.
+
 PHI node insertion:
 The standard algorithm for PHI node insertion is used:
 1. Find dominators for each basic block

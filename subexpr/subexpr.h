@@ -7,6 +7,7 @@
 
 #include "ProgramUnit.h"
 
+#include "SubExprWorkspace.h"
 
 class BasicBlock;
 
