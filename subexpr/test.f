@@ -3,7 +3,7 @@
       integer i, j, k, a, b
 
       i = j + k
-      b = a + 1
+      b = b * d
       a = j + k
 
       print *, i
