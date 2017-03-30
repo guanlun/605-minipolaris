@@ -1,4 +1,5 @@
 #include <map>
+#include <vector>
 #include <sstream>
 #include "Statement/AssignmentStmt.h"
 
@@ -99,6 +100,15 @@ Expression* replace_expression(Expression* expr, Expression* oldExpr, Expression
 	return expr;
 }
 
+void replace_expression_in_stmt(Statement* stmt, Expression* oldExpr, Expression* newExpr) {
+	for (Mutator<Expression> exprIter = stmt->iterate_expressions(); exprIter.valid(); ++exprIter) {
+		Expression& expr = exprIter.current();
+		exprIter.assign() = replace_expression(&expr, oldExpr, newExpr);
+	}
+
+	stmt->build_refs();
+}
+
 void binarify_operations(ProgramUnit& pgm) {
 	StmtList& stmts = pgm.stmts();
 
@@ -132,9 +142,9 @@ set<Expression*>& get_targeted_exprs(StmtList& stmts) {
 		}
 	}
 
-	for (map<Expression*, Statement*>::iterator it = exprStmtLookup.begin(); it != exprStmtLookup.end(); ++it) {
-		cout << "entry: " << *it->first << ": " << it->second->tag() << endl;
-	}
+//	for (map<Expression*, Statement*>::iterator it = exprStmtLookup.begin(); it != exprStmtLookup.end(); ++it) {
+//		cout << "entry: " << *it->first << ": " << it->second->tag() << endl;
+//	}
 
 	return exprs;
 }
@@ -220,54 +230,81 @@ void calculate_in_out_sets(ProgramUnit& pgm) {
 
 		workspace->outSet = resultSet;
 	}
-
-	for (Iterator<Statement> stmtIter = stmts; stmtIter.valid(); ++stmtIter) {
-		Statement& stmt = stmtIter.current();
-
-		cout << *get_workspace(stmt) << endl;
-	}
 }
 
-Expression* process_avail_expr(Expression& availExpr, ProgramUnit& pgm, Statement& parentStmt) {
+void eliminate_common_subexpr_in_stmt(Statement& defStmt, ProgramUnit& pgm) {
 	StmtList& stmts = pgm.stmts();
 
-	for (Iterator<Statement> stmtIter = stmts; stmtIter.valid(); ++stmtIter) {
-		Statement& stmt = stmtIter.current();
+	SubExprWorkspace* defStmtWorkspace = get_workspace(defStmt);
 
-		if (&stmt == &parentStmt) {
+	Expression* targetExpr = defStmtWorkspace->targetExpr;
+
+	if (targetExpr == NULL) {
+		// Current statement does not have a target expression for elmination
+		return;
+	}
+
+	vector<Statement*> stmtsWithCommonSubExpr;
+
+	for (Iterator<Statement> useIter = stmts; useIter.valid(); ++useIter) {
+		Statement& useStmt = useIter.current();
+
+		if (&defStmt == &useStmt) {
 			continue;
 		}
 
-		for (Mutator<Expression> exprIter = stmt.iterate_expressions(); exprIter.valid(); ++exprIter) {
-			Expression& expr = exprIter.current();
+		SubExprWorkspace* useStmtWorkspace = get_workspace(useStmt);
 
-			if (expr_eq(availExpr, expr)) {
-				Expression* lhs = new_variable(new_temp_variable_name(), expr.type(), pgm);
-				Expression* rhs = expr.clone();
+		// Check if the target expression in the two statements match
+		Expression* candidateExpr = useStmtWorkspace->targetExpr;
+		if ((candidateExpr == NULL) || !expr_eq(*targetExpr, *candidateExpr)) {
+			continue;
+		}
 
-				Statement* preComputedStmt = new AssignmentStmt(stmts.new_tag(), lhs, rhs);
+		// Check if the target expression defined previously is available here
+		set<Expression*>& availExprSet = useStmtWorkspace->inSet;
+		if (availExprSet.find(targetExpr) == availExprSet.end()) {
+			continue;
+		}
 
-				stmts.ins_before(preComputedStmt, &stmt);
 
-				return lhs->clone();
-			}
+
+		stmtsWithCommonSubExpr.push_back(&useStmt);
+
+
+
+	}
+
+	if (!stmtsWithCommonSubExpr.empty()) {
+		Expression* preComputedExpr = new_variable(new_temp_variable_name(), targetExpr->type(), pgm);
+		Expression* rhs = targetExpr->clone();
+
+		Statement* preComputedStmt = new AssignmentStmt(stmts.new_tag(), preComputedExpr, rhs);
+		//		stmts.ins_before(preComputedStmt, parentStmt);
+
+		for (vector<Statement*>::iterator stmtIter = stmtsWithCommonSubExpr.begin();
+			stmtIter != stmtsWithCommonSubExpr.end();
+			++stmtIter) {
+			Statement* stmtWithCommonSubExpr = *stmtIter;
+			SubExprWorkspace* ws = get_workspace(*stmtWithCommonSubExpr);
+
+			replace_expression_in_stmt(stmtWithCommonSubExpr, ws->targetExpr, preComputedExpr);
+
+			ws->targetExpr = NULL;
 		}
 	}
 
-	return NULL;
-}
-
-bool eliminate_common_subexpr_in_stmt(Statement& stmt, ProgramUnit& pgm) {
-	StmtList& stmts = pgm.stmts();
-
-	SubExprWorkspace* workspace = get_workspace(stmt);
-
+	/*
 	set<Expression*>& availExprSet = workspace->inSet;
 
 	for (set<Expression*>::iterator availIter = availExprSet.begin();
 		availIter != availExprSet.end();
 		++availIter) {
 		Expression* availExpr = *availIter;
+
+		cout << "~~~~~" << endl;
+		cout << availExpr << endl;
+		cout << "available: " << *availExpr << endl;
 
 		if (workspace->targetExpr == NULL) {
 			continue;
@@ -283,52 +320,26 @@ bool eliminate_common_subexpr_in_stmt(Statement& stmt, ProgramUnit& pgm) {
 
 			Statement* preComputedStmt = new AssignmentStmt(stmts.new_tag(), preComputedExpr, rhs);
 
-			stmts.ins_before(preComputedStmt, &parentStmt);
+			stmts.ins_before(preComputedStmt, parentStmt);
 
-//			Expression* preComputedExpr = process_avail_expr(expr, pgm, stmt);
-//
-//			if (preComputedExpr) {
-//				cout << *preComputedExpr << endl;
-//				exprIter.assign() = preComputedExpr;
-//				return true;
-//			}
+			replace_expression_in_stmt(parentStmt, availExpr, preComputedExpr);
+			replace_expression_in_stmt(&stmt, workspace->targetExpr, preComputedExpr);
+
+			cout << "-----after processing: -----" << endl;
+			cout << stmt << endl;
 		}
-
 	}
-
-	return false;
+	*/
 }
 
 void eliminate_common_subexpr(ProgramUnit& pgm) {
 	StmtList& stmts = pgm.stmts();
 
-	map<Expression*, Expression*> replaceMap;
-
 	for (Iterator<Statement> stmtIter = stmts; stmtIter.valid(); ++stmtIter) {
 		Statement& stmt = stmtIter.current();
 
-		if (eliminate_common_subexpr_in_stmt(stmt, pgm)) {
-			stmt.build_refs();
-		}
+		eliminate_common_subexpr_in_stmt(stmt, pgm);
 	}
-
-//	for (map<Expression*, Expression*>::iterator replaceIter = replaceMap.begin();
-//			replaceIter != replaceMap.end();
-//			++replaceIter) {
-//		cout << *replaceIter->first << endl;
-//
-//		for (Iterator<Statement> stmtIter = stmts; stmtIter.valid(); ++stmtIter) {
-//			Statement& stmt = stmtIter.current();
-//
-//			for (Mutator<Expression> exprIter = stmt.iterate_expressions(); exprIter.valid(); ++exprIter) {
-//				Expression& expr = exprIter.current();
-//
-//				cout << *replaceIter->second << endl;
-//				exprIter.assign() = replace_expression(&expr, replaceIter->first, replaceIter->second);
-//				break;
-//			}
-//		}
-//	}
 }
 
 void subexpr_elimination(ProgramUnit& pgm,

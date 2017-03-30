@@ -3,8 +3,10 @@
       integer i, j, k, a, b
 
       i = j + k
-      b = b * d
+
+      b = j + k
       a = j + k
+      
 
       print *, i
       stop
