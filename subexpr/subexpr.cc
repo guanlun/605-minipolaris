@@ -2,6 +2,8 @@
 #include <vector>
 #include <sstream>
 #include "Statement/AssignmentStmt.h"
+#include "Expression/BinaryExpr.h"
+#include "Expression/NonBinaryExpr.h"
 
 #include "subexpr.h"
 
@@ -109,13 +111,94 @@ void replace_expression_in_stmt(Statement* stmt, Expression* oldExpr, Expression
 	stmt->build_refs();
 }
 
+Expression* binary_conversion_helper(Expression& expr, vector<Statement*>& intermediateStmts, ProgramUnit& pgm) {
+	bool allSingle = true;
+
+	vector<Expression*> newExprs;
+
+	for (Iterator<Expression> argIter = expr.arg_list(); argIter.valid(); ++argIter) {
+		Expression& argExpr = argIter.current();
+
+		if (argExpr.op() != ID_OP) {
+			// TODO: should handle other cases (array, etc.)
+
+			allSingle = false;
+
+//			cout << "arg: " << argExpr << " is not id" << endl;
+
+			Expression* intermediateExpr = binary_conversion_helper(argExpr, intermediateStmts, pgm);
+			newExprs.push_back(intermediateExpr);
+
+		} else {
+			newExprs.push_back(&argExpr);
+		}
+	}
+
+//	cout << "--------------------------------" << endl;
+//	cout << "For expr " << expr << endl;
+//	for (vector<Expression*>::iterator it = newExprs.begin(); it != newExprs.end(); ++it) {
+//		cout << **it << " ";
+//	}
+//	cout << endl << "--------------------------------" << endl;
+
+	Expression* preComputedExpr = new_variable(new_temp_variable_name(), expr.type(), pgm);
+
+	OP_TYPE op = expr.op();
+
+	Expression* op1 = newExprs[0];
+	Expression* op2 = newExprs[1];
+
+	// TODO
+	Expression* newExpr = add(op1->clone(), op2->clone());
+
+//	Expression* newExpr = new NonBinaryExpr(
+//		ADD_OP,
+//		expr_type(ADD_OP, op1->type(), op2->type()),
+//		op1->clone(),
+//		op2->clone()
+//	);
+
+	AssignmentStmt* intermediateStmt = new AssignmentStmt(pgm.stmts().new_tag(), preComputedExpr, newExpr);
+
+	intermediateStmts.push_back(intermediateStmt);
+
+	return preComputedExpr;
+}
+
+void convert_to_binary_operation(Statement& stmt, ProgramUnit& pgm) {
+	cout << stmt << endl;
+
+	StmtList& stmts = pgm.stmts();
+
+	for (Iterator<Expression> exprIter = stmt.iterate_expressions(); exprIter.valid(); ++exprIter) {
+		Expression& expr = exprIter.current();
+
+		if (is_targeted_binary_expr(expr)) {
+			vector<Statement*> intermediateStmts;
+
+			binary_conversion_helper(expr, intermediateStmts, pgm);
+
+			for (vector<Statement*>::iterator intermediateIter = intermediateStmts.begin();
+				intermediateIter != intermediateStmts.end();
+				++intermediateIter) {
+				Statement* intermediateStmt = *intermediateIter;
+
+				cout << "inserting..." << endl;
+				cout << *intermediateStmt << endl;
+
+				stmts.ins_before(intermediateStmt, &stmt);
+			}
+		}
+	}
+}
+
 void binarify_operations(ProgramUnit& pgm) {
 	StmtList& stmts = pgm.stmts();
 
 	for (Iterator<Statement> stmtIter = stmts; stmtIter.valid(); ++stmtIter) {
 		Statement& stmt = stmtIter.current();
 
-
+		convert_to_binary_operation(stmt, pgm);
 	}
 }
 
@@ -134,8 +217,6 @@ set<Expression*>& get_targeted_exprs(StmtList& stmts) {
 				exprStmtLookup[&expr] = &stmt;
 
 				SubExprWorkspace* workspace = get_workspace(stmt);
-
-//				workspace->targetExprs.insert(&expr);
 
 				workspace->targetExpr = &expr;
 			}
@@ -266,13 +347,7 @@ void eliminate_common_subexpr_in_stmt(Statement& defStmt, ProgramUnit& pgm) {
 		if (availExprSet.find(targetExpr) == availExprSet.end()) {
 			continue;
 		}
-
-
-
 		stmtsWithCommonSubExpr.push_back(&useStmt);
-
-
-
 	}
 
 	if (!stmtsWithCommonSubExpr.empty()) {
@@ -280,7 +355,8 @@ void eliminate_common_subexpr_in_stmt(Statement& defStmt, ProgramUnit& pgm) {
 		Expression* rhs = targetExpr->clone();
 
 		Statement* preComputedStmt = new AssignmentStmt(stmts.new_tag(), preComputedExpr, rhs);
-		//		stmts.ins_before(preComputedStmt, parentStmt);
+		stmts.ins_before(preComputedStmt, &defStmt);
+		replace_expression_in_stmt(&defStmt, defStmtWorkspace->targetExpr, preComputedExpr);
 
 		for (vector<Statement*>::iterator stmtIter = stmtsWithCommonSubExpr.begin();
 			stmtIter != stmtsWithCommonSubExpr.end();
@@ -293,43 +369,6 @@ void eliminate_common_subexpr_in_stmt(Statement& defStmt, ProgramUnit& pgm) {
 			ws->targetExpr = NULL;
 		}
 	}
-
-	/*
-	set<Expression*>& availExprSet = workspace->inSet;
-
-	for (set<Expression*>::iterator availIter = availExprSet.begin();
-		availIter != availExprSet.end();
-		++availIter) {
-		Expression* availExpr = *availIter;
-
-		cout << "~~~~~" << endl;
-		cout << availExpr << endl;
-		cout << "available: " << *availExpr << endl;
-
-		if (workspace->targetExpr == NULL) {
-			continue;
-		}
-
-		if (expr_eq(*availExpr, *workspace->targetExpr)) {
-			Statement* parentStmt = exprStmtLookup[availExpr];
-
-			cout << *availExpr << " is in " << parentStmt->tag() << endl;
-
-			Expression* preComputedExpr = new_variable(new_temp_variable_name(), availExpr->type(), pgm);
-			Expression* rhs = availExpr->clone();
-
-			Statement* preComputedStmt = new AssignmentStmt(stmts.new_tag(), preComputedExpr, rhs);
-
-			stmts.ins_before(preComputedStmt, parentStmt);
-
-			replace_expression_in_stmt(parentStmt, availExpr, preComputedExpr);
-			replace_expression_in_stmt(&stmt, workspace->targetExpr, preComputedExpr);
-
-			cout << "-----after processing: -----" << endl;
-			cout << stmt << endl;
-		}
-	}
-	*/
 }
 
 void eliminate_common_subexpr(ProgramUnit& pgm) {

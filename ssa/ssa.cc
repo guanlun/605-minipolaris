@@ -177,7 +177,7 @@ void compute_dominance(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {
 }
 
 void find_function_helper(set<Expression*>& funcExprs, Expression& expr) {
-    if (expr.op() == FUNCTION_CALL_OP || expr.op() == SUB_OP) {
+    if (expr.op() == FUNCTION_CALL_OP) {
         funcExprs.insert(&expr);
     } else {
         for (Iterator<Expression> exprIter = expr.arg_list(); exprIter.valid(); ++exprIter) {
