@@ -111,9 +111,42 @@ void replace_expression_in_stmt(Statement* stmt, Expression* oldExpr, Expression
 	stmt->build_refs();
 }
 
-Expression* binary_conversion_helper(Expression& expr, vector<Statement*>& intermediateStmts, ProgramUnit& pgm) {
-	bool allSingle = true;
+Expression* create_intermediate_expr(OP_TYPE op, Expression* op1, Expression* op2) {
+	Expression* op1c = op1->clone();
+	Expression* op2c = op2->clone();
 
+	switch (op) {
+	case CONCAT_OP:
+	case COLON_OP:
+	case ADD_OP:
+	case MULT_OP:
+	case OR_OP:
+	case AND_OP:
+	case EQV_OP:
+	case NEQV_OP:
+		return new NonBinaryExpr(
+			op,
+			expr_type(op, op1->type(), op2->type()),
+			op1->clone(),
+			op2->clone()
+		);
+
+	default:
+		return new BinaryExpr(
+			op,
+			expr_type(op, op1->type(), op2->type()),
+			op1->clone(),
+			op2->clone()
+		);
+	}
+
+}
+
+Expression* binary_conversion_helper(
+		Expression& expr,
+		vector<Statement*>& intermediateStmts,
+		ProgramUnit& pgm
+	) {
 	vector<Expression*> newExprs;
 
 	for (Iterator<Expression> argIter = expr.arg_list(); argIter.valid(); ++argIter) {
@@ -121,10 +154,6 @@ Expression* binary_conversion_helper(Expression& expr, vector<Statement*>& inter
 
 		if (argExpr.op() != ID_OP) {
 			// TODO: should handle other cases (array, etc.)
-
-			allSingle = false;
-
-//			cout << "arg: " << argExpr << " is not id" << endl;
 
 			Expression* intermediateExpr = binary_conversion_helper(argExpr, intermediateStmts, pgm);
 			newExprs.push_back(intermediateExpr);
@@ -134,40 +163,16 @@ Expression* binary_conversion_helper(Expression& expr, vector<Statement*>& inter
 		}
 	}
 
-//	cout << "--------------------------------" << endl;
-//	cout << "For expr " << expr << endl;
-//	for (vector<Expression*>::iterator it = newExprs.begin(); it != newExprs.end(); ++it) {
-//		cout << **it << " ";
-//	}
-//	cout << endl << "--------------------------------" << endl;
-
 	Expression* preComputedExpr = new_variable(new_temp_variable_name(), expr.type(), pgm);
-
-	OP_TYPE op = expr.op();
-
-	Expression* op1 = newExprs[0];
-	Expression* op2 = newExprs[1];
-
-	// TODO
-	Expression* newExpr = add(op1->clone(), op2->clone());
-
-//	Expression* newExpr = new NonBinaryExpr(
-//		ADD_OP,
-//		expr_type(ADD_OP, op1->type(), op2->type()),
-//		op1->clone(),
-//		op2->clone()
-//	);
+	Expression* newExpr = create_intermediate_expr(expr.op(), newExprs[0], newExprs[1]);
 
 	AssignmentStmt* intermediateStmt = new AssignmentStmt(pgm.stmts().new_tag(), preComputedExpr, newExpr);
-
 	intermediateStmts.push_back(intermediateStmt);
 
 	return preComputedExpr;
 }
 
 void convert_to_binary_operation(Statement& stmt, ProgramUnit& pgm) {
-	cout << stmt << endl;
-
 	StmtList& stmts = pgm.stmts();
 
 	for (Iterator<Expression> exprIter = stmt.iterate_expressions(); exprIter.valid(); ++exprIter) {
@@ -176,18 +181,17 @@ void convert_to_binary_operation(Statement& stmt, ProgramUnit& pgm) {
 		if (is_targeted_binary_expr(expr)) {
 			vector<Statement*> intermediateStmts;
 
-			binary_conversion_helper(expr, intermediateStmts, pgm);
+			Expression* lastIntermediateExpr = binary_conversion_helper(expr, intermediateStmts, pgm);
 
 			for (vector<Statement*>::iterator intermediateIter = intermediateStmts.begin();
 				intermediateIter != intermediateStmts.end();
 				++intermediateIter) {
 				Statement* intermediateStmt = *intermediateIter;
 
-				cout << "inserting..." << endl;
-				cout << *intermediateStmt << endl;
-
 				stmts.ins_before(intermediateStmt, &stmt);
 			}
+
+			replace_expression_in_stmt(&stmt, &expr, lastIntermediateExpr);
 		}
 	}
 }
