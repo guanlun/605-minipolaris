@@ -1,9 +1,6 @@
-      program zamp3
-      external somesub, othrsub
-      integer i, j, k, a, b
-
-      i = j + k * a - b
-
-      print *, i
-      stop
-      end
+        program name 
+        integer*4 i, j,a ,b ,c
+        
+        a = i + j + c + b
+        
+        end 

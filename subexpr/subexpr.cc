@@ -4,6 +4,7 @@
 #include "Statement/AssignmentStmt.h"
 #include "Expression/BinaryExpr.h"
 #include "Expression/NonBinaryExpr.h"
+#include "Symbol/VariableSymbol.h"
 
 #include "subexpr.h"
 
@@ -45,14 +46,17 @@ bool expr_eq(Expression& e1, Expression& e2) {
 }
 
 SubExprWorkspace* get_workspace(Statement& stmt) {
-	WorkSpace* ws = stmt.work_stack().top_ref(PASS_TAG);
+	SubExprWorkspace* ws = (SubExprWorkspace*)stmt.work_stack().top_ref(6);
 
 	if (ws == NULL) {
-		ws = new SubExprWorkspace(PASS_TAG);
+		ws = new SubExprWorkspace(6);
 		stmt.work_stack().push(ws);
+	} else {
+//		cout << "workspace for " << stmt.tag() << " already exists" << endl;
+//		cout << ws << "   " << stmt.work_stack().entries() << endl;
 	}
 
-	return (SubExprWorkspace*) ws;
+	return ws;
 }
 
 bool is_targeted_unary_expr(Expression& expr) {
@@ -149,16 +153,29 @@ Expression* binary_conversion_helper(
 	) {
 	vector<Expression*> newExprs;
 
+	cout << expr << " " << expr.arg_list().entries() << endl;
+
 	for (Iterator<Expression> argIter = expr.arg_list(); argIter.valid(); ++argIter) {
 		Expression& argExpr = argIter.current();
 
-		if (argExpr.op() != ID_OP) {
-			// TODO: should handle other cases (array, etc.)
+		OP_TYPE argOp = argExpr.op();
 
+		// TODO: should handle other cases (array, etc.)
+//		switch (argOp) {
+//		case ID_OP:
+//		case INTEGER_CONSTANT_OP:
+//		case REAL_CONSTANT_OP:
+//			break;
+//		default:
+//			break;
+//		}
+
+		if (argExpr.arg_list().entries() > 1) {
+			// Nested expression
 			Expression* intermediateExpr = binary_conversion_helper(argExpr, intermediateStmts, pgm);
 			newExprs.push_back(intermediateExpr);
-
 		} else {
+			// Single expression
 			newExprs.push_back(&argExpr);
 		}
 	}
@@ -169,7 +186,25 @@ Expression* binary_conversion_helper(
 	AssignmentStmt* intermediateStmt = new AssignmentStmt(pgm.stmts().new_tag(), preComputedExpr, newExpr);
 	intermediateStmts.push_back(intermediateStmt);
 
-	return preComputedExpr;
+	cout << "intermediate: " << *intermediateStmt << endl;
+
+	if (newExprs.size() == 2) {
+		return preComputedExpr;
+	} else {
+		Expression* lastPreComputedExpr = preComputedExpr;
+
+		for (int idx = 2; idx < newExprs.size(); idx++) {
+			Expression* preComputedExpr = new_variable(new_temp_variable_name(), expr.type(), pgm);
+			Expression* newExpr = create_intermediate_expr(expr.op(), preComputedExpr, newExprs[idx]);
+
+			AssignmentStmt* intermediateStmt = new AssignmentStmt(pgm.stmts().new_tag(), lastPreComputedExpr->clone(), newExpr);
+			intermediateStmts.push_back(intermediateStmt);
+
+			cout << "intermediate: " << *intermediateStmt << endl;
+		}
+
+		return preComputedExpr;
+	}
 }
 
 void convert_to_binary_operation(Statement& stmt, ProgramUnit& pgm) {
@@ -180,6 +215,8 @@ void convert_to_binary_operation(Statement& stmt, ProgramUnit& pgm) {
 
 		if (is_targeted_binary_expr(expr)) {
 			vector<Statement*> intermediateStmts;
+
+//			cout << expr << endl;
 
 			Expression* lastIntermediateExpr = binary_conversion_helper(expr, intermediateStmts, pgm);
 
@@ -206,7 +243,7 @@ void binarify_operations(ProgramUnit& pgm) {
 	}
 }
 
-set<Expression*>& get_targeted_exprs(StmtList& stmts) {
+set<Expression*> get_targeted_exprs(StmtList& stmts) {
 	set<Expression*> exprs;
 
 	for (Iterator<Statement> stmtIter = stmts; stmtIter.valid(); ++stmtIter) {
@@ -227,10 +264,6 @@ set<Expression*>& get_targeted_exprs(StmtList& stmts) {
 		}
 	}
 
-//	for (map<Expression*, Statement*>::iterator it = exprStmtLookup.begin(); it != exprStmtLookup.end(); ++it) {
-//		cout << "entry: " << *it->first << ": " << it->second->tag() << endl;
-//	}
-
 	return exprs;
 }
 
@@ -246,17 +279,30 @@ void calculate_in_out_sets(ProgramUnit& pgm) {
 
 	for (Iterator<Statement> stmtIter = stmts; stmtIter.valid(); ++stmtIter) {
 		Statement& stmt = stmtIter.current();
+		cout << stmt << endl;
 
 		SubExprWorkspace* workspace = get_workspace(stmt);
 
 		if (isEntryStmt) {
 			isEntryStmt = false;
 		} else {
+			/*
 			for (Iterator<Statement> outSetStmtIter = stmts; outSetStmtIter.valid(); ++outSetStmtIter) {
 				Statement& outSetStmt = outSetStmtIter.current();
 
+//				cout << outSetStmt.tag() << endl;
+
+				cout << 1 << endl;
+				cout << "size: " << allTargetedExprs.size() << endl;
 				workspace->outSet = allTargetedExprs;
+				cout << 2 << endl;
+
 			}
+			*/
+
+//			cout << 1 << endl;
+			workspace->outSet = allTargetedExprs;
+//			cout << 2 << endl;
 		}
 	}
 
@@ -331,6 +377,7 @@ void eliminate_common_subexpr_in_stmt(Statement& defStmt, ProgramUnit& pgm) {
 
 	vector<Statement*> stmtsWithCommonSubExpr;
 
+	cout << 1 << endl;
 	for (Iterator<Statement> useIter = stmts; useIter.valid(); ++useIter) {
 		Statement& useStmt = useIter.current();
 
@@ -353,8 +400,9 @@ void eliminate_common_subexpr_in_stmt(Statement& defStmt, ProgramUnit& pgm) {
 		}
 		stmtsWithCommonSubExpr.push_back(&useStmt);
 	}
-
+	cout << 2 << endl;
 	if (!stmtsWithCommonSubExpr.empty()) {
+		// TODO: something really weird going on here. variable names becomes somethingl like "???"
 		Expression* preComputedExpr = new_variable(new_temp_variable_name(), targetExpr->type(), pgm);
 		Expression* rhs = targetExpr->clone();
 
@@ -373,6 +421,7 @@ void eliminate_common_subexpr_in_stmt(Statement& defStmt, ProgramUnit& pgm) {
 			ws->targetExpr = NULL;
 		}
 	}
+	cout << 3 << endl;
 }
 
 void eliminate_common_subexpr(ProgramUnit& pgm) {
@@ -385,6 +434,44 @@ void eliminate_common_subexpr(ProgramUnit& pgm) {
 	}
 }
 
+void propagate_copies(ProgramUnit& pgm) {
+	StmtList& stmts = pgm.stmts();
+
+	for (Iterator<Statement> defIter = stmts.stmts_of_type(ASSIGNMENT_STMT); defIter.valid(); ++defIter) {
+		Statement& defStmt = defIter.current();
+
+		Expression& copiedVar = defStmt.rhs();
+		Expression& definedVar = defStmt.lhs();
+
+		// TODO: arrays
+		if (defStmt.rhs().op() != ID_OP) {
+			continue;
+		}
+
+		for (Iterator<Statement> useIter = stmts; useIter.valid(); ++useIter) {
+			Statement& useStmt = useIter.current();
+
+			for (Mutator<Expression> inIter = useStmt.in_refs(); inIter.valid(); ++inIter) {
+				Expression& inExpr = inIter.current();
+
+				if (inExpr == definedVar) {
+//					cout << "Found use of var " << inExpr << " in " << useStmt.tag() << endl;
+
+					inIter.assign() = copiedVar.clone();
+				}
+			}
+
+			useStmt.build_refs();
+
+//			replace_expression_in_stmt(&useStmt, &definedVar, &copiedVar);
+		}
+
+//		cout << "should be deleted: " << defStmt << endl;
+
+//		stmts.del(defStmt);
+	}
+}
+
 void subexpr_elimination(ProgramUnit& pgm,
                          List<BasicBlock> * pgm_basic_blocks) {
 
@@ -393,4 +480,21 @@ void subexpr_elimination(ProgramUnit& pgm,
 	calculate_in_out_sets(pgm);
 
 	eliminate_common_subexpr(pgm);
+
+	propagate_copies(pgm);
+
+
+
+
+//	calculate_in_out_sets(pgm);
+//
+//	eliminate_common_subexpr(pgm);
+//
+//	propagate_copies(pgm);
+//
+//	calculate_in_out_sets(pgm);
+//
+//	eliminate_common_subexpr(pgm);
+//
+//	propagate_copies(pgm);
 }

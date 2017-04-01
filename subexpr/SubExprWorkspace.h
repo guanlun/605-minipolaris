@@ -17,13 +17,13 @@ public:
 	Listable *listable_clone() const { return NULL; };
 
 	INLINE void print(ostream &o) const {
-//		o << "[ SubExprWorkspace ";
+		o << "[ SubExprWorkspace ";
 //		for (set<Expression*>::iterator outIter = outSet.begin(); outIter != outSet.end(); ++outIter) {
 //			Expression* outExpr = *outIter;
 //
 //			o << *outExpr << " ";
 //		}
-//		o << "]";
+		o << "]" << endl;
 	}
 
 	INLINE int structures_OK() const { return 1; };
