@@ -648,7 +648,7 @@ void ssa(ProgramUnit & pgm, List<BasicBlock>* basicBlocks)
     compute_dominance(pgm, basicBlocks);
     generate_phi_stmts(pgm, basicBlocks);
     rename_variables(pgm, basicBlocks);
-    generate_upsilon_stmts(pgm, basicBlocks);
+    // generate_upsilon_stmts(pgm, basicBlocks);
 }
 
 void restore_variable_name(Expression& expr) {

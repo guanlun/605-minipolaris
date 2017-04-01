@@ -2,6 +2,7 @@
 #include <vector>
 #include <sstream>
 #include "Statement/AssignmentStmt.h"
+#include "Expression/UnaryExpr.h"
 #include "Expression/BinaryExpr.h"
 #include "Expression/NonBinaryExpr.h"
 #include "Symbol/VariableSymbol.h"
@@ -70,6 +71,7 @@ bool is_targeted_unary_expr(Expression& expr) {
 
 bool is_targeted_binary_expr(Expression& expr) {
 	switch (expr.op()) {
+	case NOT_OP:
 	case EQ_OP:
 	case NE_OP:
 	case LT_OP:
@@ -115,11 +117,14 @@ void replace_expression_in_stmt(Statement* stmt, Expression* oldExpr, Expression
 	stmt->build_refs();
 }
 
-Expression* create_intermediate_expr(OP_TYPE op, Expression* op1, Expression* op2) {
-	Expression* op1c = op1->clone();
-	Expression* op2c = op2->clone();
-
+Expression* create_intermediate_expr(OP_TYPE op, Expression* op1, Expression* op2 = NULL) {
 	switch (op) {
+	case NOT_OP:
+		return new UnaryExpr(
+			op,
+			op1->type(),
+			op1->clone()
+		);
 	case CONCAT_OP:
 	case COLON_OP:
 	case ADD_OP:
@@ -153,22 +158,12 @@ Expression* binary_conversion_helper(
 	) {
 	vector<Expression*> newExprs;
 
-	cout << expr << " " << expr.arg_list().entries() << endl;
+	cout << "expr and arg list: " << expr << " " << expr.arg_list() << endl;
 
 	for (Iterator<Expression> argIter = expr.arg_list(); argIter.valid(); ++argIter) {
 		Expression& argExpr = argIter.current();
 
 		OP_TYPE argOp = argExpr.op();
-
-		// TODO: should handle other cases (array, etc.)
-//		switch (argOp) {
-//		case ID_OP:
-//		case INTEGER_CONSTANT_OP:
-//		case REAL_CONSTANT_OP:
-//			break;
-//		default:
-//			break;
-//		}
 
 		if (argExpr.arg_list().entries() > 1) {
 			// Nested expression
@@ -181,30 +176,27 @@ Expression* binary_conversion_helper(
 	}
 
 	Expression* preComputedExpr = new_variable(new_temp_variable_name(), expr.type(), pgm);
+
+//	cout << newExprs.size() << endl;
 	Expression* newExpr = create_intermediate_expr(expr.op(), newExprs[0], newExprs[1]);
+//	cout << "after" << endl;
 
 	AssignmentStmt* intermediateStmt = new AssignmentStmt(pgm.stmts().new_tag(), preComputedExpr, newExpr);
 	intermediateStmts.push_back(intermediateStmt);
 
-	cout << "intermediate: " << *intermediateStmt << endl;
-
-	if (newExprs.size() == 2) {
-		return preComputedExpr;
-	} else {
+	if (newExprs.size() > 2) {
 		Expression* lastPreComputedExpr = preComputedExpr;
 
 		for (int idx = 2; idx < newExprs.size(); idx++) {
-			Expression* preComputedExpr = new_variable(new_temp_variable_name(), expr.type(), pgm);
-			Expression* newExpr = create_intermediate_expr(expr.op(), preComputedExpr, newExprs[idx]);
+			preComputedExpr = new_variable(new_temp_variable_name(), expr.type(), pgm);
+			Expression* newExpr = create_intermediate_expr(expr.op(), lastPreComputedExpr->clone(), newExprs[idx]);
 
-			AssignmentStmt* intermediateStmt = new AssignmentStmt(pgm.stmts().new_tag(), lastPreComputedExpr->clone(), newExpr);
+			AssignmentStmt* intermediateStmt = new AssignmentStmt(pgm.stmts().new_tag(), preComputedExpr, newExpr);
 			intermediateStmts.push_back(intermediateStmt);
-
-			cout << "intermediate: " << *intermediateStmt << endl;
 		}
-
-		return preComputedExpr;
 	}
+
+	return preComputedExpr;
 }
 
 void convert_to_binary_operation(Statement& stmt, ProgramUnit& pgm) {
@@ -215,8 +207,6 @@ void convert_to_binary_operation(Statement& stmt, ProgramUnit& pgm) {
 
 		if (is_targeted_binary_expr(expr)) {
 			vector<Statement*> intermediateStmts;
-
-//			cout << expr << endl;
 
 			Expression* lastIntermediateExpr = binary_conversion_helper(expr, intermediateStmts, pgm);
 
@@ -229,6 +219,7 @@ void convert_to_binary_operation(Statement& stmt, ProgramUnit& pgm) {
 			}
 
 			replace_expression_in_stmt(&stmt, &expr, lastIntermediateExpr);
+		} else {
 		}
 	}
 }
@@ -279,7 +270,6 @@ void calculate_in_out_sets(ProgramUnit& pgm) {
 
 	for (Iterator<Statement> stmtIter = stmts; stmtIter.valid(); ++stmtIter) {
 		Statement& stmt = stmtIter.current();
-		cout << stmt << endl;
 
 		SubExprWorkspace* workspace = get_workspace(stmt);
 
@@ -290,19 +280,12 @@ void calculate_in_out_sets(ProgramUnit& pgm) {
 			for (Iterator<Statement> outSetStmtIter = stmts; outSetStmtIter.valid(); ++outSetStmtIter) {
 				Statement& outSetStmt = outSetStmtIter.current();
 
-//				cout << outSetStmt.tag() << endl;
-
-				cout << 1 << endl;
 				cout << "size: " << allTargetedExprs.size() << endl;
 				workspace->outSet = allTargetedExprs;
-				cout << 2 << endl;
-
 			}
 			*/
 
-//			cout << 1 << endl;
 			workspace->outSet = allTargetedExprs;
-//			cout << 2 << endl;
 		}
 	}
 
@@ -455,7 +438,7 @@ void propagate_copies(ProgramUnit& pgm) {
 				Expression& inExpr = inIter.current();
 
 				if (inExpr == definedVar) {
-//					cout << "Found use of var " << inExpr << " in " << useStmt.tag() << endl;
+					cout << "Found use of var " << inExpr << " in " << useStmt.tag() << endl;
 
 					inIter.assign() = copiedVar.clone();
 				}
@@ -481,7 +464,7 @@ void subexpr_elimination(ProgramUnit& pgm,
 
 	eliminate_common_subexpr(pgm);
 
-	propagate_copies(pgm);
+//	propagate_copies(pgm);
 
 
 
