@@ -5,10 +5,10 @@
         j = i + 5
         a = 4
         b = 6
-        IF ( s .EQ. 5) THEN
-           a = i + j
+       IF ( s .EQ. 5) THEN
+         a = i + j
         ELSE
-           b = i + j
+         b = i + j
         ENDIF
         s = i + j
         s = s + a + b

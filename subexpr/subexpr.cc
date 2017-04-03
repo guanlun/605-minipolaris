@@ -15,6 +15,7 @@ int PASS_TAG = 4;
 int variableNameNum = 1;
 
 map<string, set<Statement*>* > exprStmtLookup;
+map<Statement*, SubExprWorkspace*> wsLookup;
 
 const char* new_temp_variable_name() {
 	stringstream ss;
@@ -63,14 +64,11 @@ bool expr_eq(Expression& e1, Expression& e2) {
 }
 
 SubExprWorkspace* get_workspace(Statement& stmt) {
-	SubExprWorkspace* ws = (SubExprWorkspace*)stmt.work_stack().top_ref(6);
+	SubExprWorkspace* ws = wsLookup[&stmt];
 
 	if (ws == NULL) {
-		ws = new SubExprWorkspace(6);
-		stmt.work_stack().push(ws);
-	} else {
-//		cout << "workspace for " << stmt.tag() << " already exists" << endl;
-//		cout << ws << "   " << stmt.work_stack().entries() << endl;
+		ws = new SubExprWorkspace(PASS_TAG);
+		wsLookup[&stmt] = ws;
 	}
 
 	return ws;
@@ -130,12 +128,15 @@ Statement* find_closest_common_dominator(set<Statement*> stmts) {
 
 	int stmtIdx = 0;
 
+	cout << "Finding..." << endl;
 	// Create a common set of dominators
 	for (set<Statement*>::iterator stmtIter = stmts.begin();
 		stmtIter != stmts.end();
 		++stmtIter) {
 
 		Statement* stmt = *stmtIter;
+
+		cout << *stmt << endl;
 		SubExprWorkspace* ws = get_workspace(*stmt);
 
 		if (stmtIdx == 0) {
@@ -153,6 +154,8 @@ Statement* find_closest_common_dominator(set<Statement*> stmts) {
 
 	while (commonDominators.count(runner) == 0) {
 		SubExprWorkspace* runnerWS = get_workspace(*runner);
+
+//		cout << runnerWS->idom << endl;
 
 		runner = runnerWS->idom;
 	}
@@ -330,7 +333,8 @@ Expression* binary_conversion_helper(
 		newExpr = create_intermediate_expr(expr.op(), newExprs[0], newExprs[1]);
 	}
 
-	AssignmentStmt* intermediateStmt = new AssignmentStmt(pgm.stmts().new_tag(), preComputedExpr, newExpr);
+	Statement* intermediateStmt = new AssignmentStmt(pgm.stmts().new_tag(), preComputedExpr, newExpr);
+//	get_workspace(*intermediateStmt);
 	intermediateStmts.push_back(intermediateStmt);
 
 	if (operatorCount > 2) {
@@ -341,7 +345,8 @@ Expression* binary_conversion_helper(
 			preComputedExpr = new_variable(new_temp_variable_name(), expr.type(), pgm);
 			Expression* newExpr = create_intermediate_expr(expr.op(), lastPreComputedExpr->clone(), newExprs[idx]);
 
-			AssignmentStmt* intermediateStmt = new AssignmentStmt(pgm.stmts().new_tag(), preComputedExpr, newExpr);
+			intermediateStmt = new AssignmentStmt(pgm.stmts().new_tag(), preComputedExpr, newExpr);
+//			get_workspace(*intermediateStmt);
 			intermediateStmts.push_back(intermediateStmt);
 		}
 	}
@@ -597,6 +602,7 @@ void _eliminate_common_subexpr_in_stmt(Statement& defStmt, ProgramUnit& pgm) {
 		Expression* rhs = targetExpr->clone();
 
 		Statement* preComputedStmt = new AssignmentStmt(stmts.new_tag(), preComputedExpr, rhs);
+//		get_workspace(*preComputedStmt);
 		stmts.ins_before(preComputedStmt, &defStmt);
 		replace_expression_in_stmt(&defStmt, defStmtWorkspace->targetExpr, preComputedExpr);
 
@@ -620,6 +626,8 @@ void _eliminate_common_subexpr_in_stmt(Statement& defStmt, ProgramUnit& pgm) {
 void eliminate_common_subexpr(ProgramUnit& pgm) {
 	StmtList& stmts = pgm.stmts();
 
+	cout << stmts << endl;
+
 	for (map<string, set<Statement*>* >::iterator exprIter = exprStmtLookup.begin();
 		exprIter != exprStmtLookup.end();
 		++exprIter) {
@@ -633,12 +641,14 @@ void eliminate_common_subexpr(ProgramUnit& pgm) {
 		SubExprWorkspace* ws = get_workspace(*anyStmtWithCommonExpr);
 		Expression* targetExpr = ws->targetExpr;
 
+		cout << "before finding" << endl;
 		Statement* closestCommonDominator = find_closest_common_dominator(*stmtsWithCommonExpr);
-
+		cout << "after finding" << endl;
 		Expression* preComputedExpr = new_variable(new_temp_variable_name(), targetExpr->type(), pgm);
 		Expression* rhs = targetExpr->clone();
 
 		Statement* preComputedStmt = new AssignmentStmt(stmts.new_tag(), preComputedExpr, rhs);
+//		get_workspace(*preComputedStmt);
 		stmts.ins_before(preComputedStmt, closestCommonDominator);
 
 		for (set<Statement*>::iterator commonExprIter = stmtsWithCommonExpr->begin();
@@ -702,28 +712,15 @@ void propagate_copies(ProgramUnit& pgm) {
 
 void subexpr_elimination(ProgramUnit& pgm,
                          List<BasicBlock> * pgm_basic_blocks) {
-	compute_dominance(pgm);
-
+	StmtList& stmts = pgm.stmts();
 	binarify_operations(pgm);
+
+	// TODO: while loop
 
 	calculate_in_out_sets(pgm);
 
+	compute_dominance(pgm);
 	eliminate_common_subexpr(pgm);
-
 	propagate_copies(pgm);
 
-
-
-
-//	calculate_in_out_sets(pgm);
-//
-//	eliminate_common_subexpr(pgm);
-//
-//	propagate_copies(pgm);
-//
-//	calculate_in_out_sets(pgm);
-//
-//	eliminate_common_subexpr(pgm);
-//
-//	propagate_copies(pgm);
 }
