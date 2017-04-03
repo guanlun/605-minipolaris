@@ -12,17 +12,20 @@
 
 class SubExprWorkspace : public WorkSpace {
 public:
-	SubExprWorkspace(int pass_tag) : WorkSpace(pass_tag), targetExpr(NULL) {}
+	SubExprWorkspace(int pass_tag) : WorkSpace(pass_tag), targetExpr(NULL), prevCopyRefStmt(NULL) {}
 
 	Listable *listable_clone() const { return NULL; };
 
 	INLINE void print(ostream &o) const {
-		o << "[ SubExprWorkspace ";
+		o << "[ SubExprWorkspace: ";
 //		for (set<Expression*>::iterator outIter = outSet.begin(); outIter != outSet.end(); ++outIter) {
 //			Expression* outExpr = *outIter;
 //
 //			o << *outExpr << " ";
 //		}
+
+//		o << prevCopyRefStmt->tag() << endl;
+
 		o << "]" << endl;
 	}
 
@@ -32,6 +35,8 @@ public:
 	set<Expression*> outSet;
 
 	Expression* targetExpr;
+
+	Statement* prevCopyRefStmt;
 };
 
 #endif /* SUBEXPR_SUBEXPRWORKSPACE_H_ */
