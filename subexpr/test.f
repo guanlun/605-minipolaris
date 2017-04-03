@@ -1,15 +1,6 @@
-        program name 
-        integer*4 i, j,a ,b ,c
-        logical*1 x
-        
-        i = 3
-        if (.NOT.(i .EQ. j)) then
-        	b = 5
-        else
-        	b = 6
-        endif
-        
-        if (.NOT.(i .EQ. j)) then
-        	print j
-        endif
-        end 
+        PROGRAM TEST4
+        INTEGER*4 i,j, n
+        DATA l /4/
+        j = a + b + c + d + e
+        STOP
+        END

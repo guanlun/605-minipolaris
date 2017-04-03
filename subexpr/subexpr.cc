@@ -20,7 +20,9 @@ map<Statement*, SubExprWorkspace*> wsLookup;
 const char* new_temp_variable_name() {
 	stringstream ss;
 
-	ss << "_t" << variableNameNum++;
+	ss << "__newvar" << variableNameNum;
+
+	variableNameNum++;
 
 	return ss.str().c_str();
 }
@@ -350,6 +352,8 @@ Expression* binary_conversion_helper(
 void convert_to_binary_operation(Statement& stmt, ProgramUnit& pgm) {
 	StmtList& stmts = pgm.stmts();
 
+	SubExprWorkspace* ws = get_workspace(stmt);
+
 	for (Iterator<Expression> exprIter = stmt.iterate_expressions(); exprIter.valid(); ++exprIter) {
 		Expression& expr = exprIter.current();
 
@@ -358,13 +362,25 @@ void convert_to_binary_operation(Statement& stmt, ProgramUnit& pgm) {
 
 			Expression* lastIntermediateExpr = binary_conversion_helper(expr, intermediateStmts, pgm, true);
 
+			Statement* prevCopyStmt = NULL;
+
 			for (vector<Statement*>::iterator intermediateIter = intermediateStmts.begin();
 				intermediateIter != intermediateStmts.end();
 				++intermediateIter) {
 				Statement* intermediateStmt = *intermediateIter;
 
 				stmts.ins_before(intermediateStmt, &stmt);
+
+				if (prevCopyStmt != NULL) {
+				    SubExprWorkspace* intermediateStmtWS = get_workspace(*intermediateStmt);
+
+				    intermediateStmtWS->prevCopyRefStmt = prevCopyStmt;
+				}
+
+				prevCopyStmt = intermediateStmt;
 			}
+
+			ws->prevCopyRefStmt = prevCopyStmt;
 
 			replace_expression_in_stmt(&stmt, &expr, lastIntermediateExpr);
 		}
@@ -407,8 +423,6 @@ set<Expression*> compute_targeted_exprs(StmtList& stmts) {
 
 				set<Statement*>* stmtWithCurrExpr = exprStmtLookup[exprStr];
 
-				cout << stmtWithCurrExpr << endl;
-
 				if (stmtWithCurrExpr == NULL) {
 					stmtWithCurrExpr = new set<Statement*>;
 					exprStmtLookup[exprStr] = stmtWithCurrExpr;
@@ -437,19 +451,15 @@ set<Expression*> compute_targeted_exprs(StmtList& stmts) {
 void eliminate_common_subexpr(ProgramUnit& pgm) {
 	StmtList& stmts = pgm.stmts();
 
-	cout << 1 << endl;
 	compute_targeted_exprs(stmts);
-	cout << 2 << endl;
 
 	for (map<string, set<Statement*>* >::iterator exprIter = exprStmtLookup.begin();
 		exprIter != exprStmtLookup.end();
 		++exprIter) {
 		set<Statement*>* stmtsWithCommonExpr = exprIter->second;
-		cout << "finding: " << exprIter->first << endl;
 		if (stmtsWithCommonExpr->size() <= 1) {
 			continue;
 		}
-		cout << "more than one" << endl;
 
 		Statement* anyStmtWithCommonExpr = *stmtsWithCommonExpr->begin();
 		SubExprWorkspace* ws = get_workspace(*anyStmtWithCommonExpr);
@@ -496,15 +506,13 @@ void propagate_copies(ProgramUnit& pgm) {
 				Expression& inExpr = inIter.current();
 
 				if (inExpr == definedVar) {
-					cout << "Found use of var " << inExpr << " in " << useStmt.tag() << endl;
+//					cout << "Found use of var " << inExpr << " in " << useStmt.tag() << endl;
 
 					inIter.assign() = copiedVar.clone();
 				}
 			}
 
 			useStmt.build_refs();
-
-//			replace_expression_in_stmt(&useStmt, &definedVar, &copiedVar);
 		}
 
 //		cout << "should be deleted: " << defStmt << endl;
@@ -518,13 +526,41 @@ void subexpr_elimination(ProgramUnit& pgm,
 	StmtList& stmts = pgm.stmts();
 	binarify_operations(pgm);
 
-	// TODO: while loop
+	for (Iterator<Statement> stmtIter = stmts; stmtIter.valid(); ++stmtIter) {
+	    Statement& stmt = stmtIter.current();
+	    SubExprWorkspace* ws = get_workspace(stmt);
 
-	compute_dominance(pgm);
-	eliminate_common_subexpr(pgm);
-	propagate_copies(pgm);
+	    cout << stmt.tag() << ": " << *ws << endl;
+	}
 
-	compute_dominance(pgm);
-	eliminate_common_subexpr(pgm);
-	propagate_copies(pgm);
+	bool changed;
+	do {
+	    cout << "new iteration" << endl;
+	    changed = false;
+
+//        List<Statement>* oldStmts = stmts.copy(stmts.first(), stmts.last());
+
+	    stringstream oldStmtsStr;
+	    stmts.write(oldStmtsStr);
+
+        compute_dominance(pgm);
+        eliminate_common_subexpr(pgm);
+        propagate_copies(pgm);
+
+        stringstream newStmtsStr;
+        pgm.stmts().write(newStmtsStr);
+
+        changed = (oldStmtsStr.str() != newStmtsStr.str());
+
+//        if (oldStmts->entries() != pgm.stmts().entries()) {
+//            changed = true;
+//        } else {
+//            for (int idx = 0; idx < oldStmts->entries(); idx++) {
+//                const Statement& oldStmt = oldStmts->operator [](idx);
+//                const Statement& newStmt = pgm.stmts().operator [](idx);
+//
+//            }
+//        }
+	} while (changed);
+
 }

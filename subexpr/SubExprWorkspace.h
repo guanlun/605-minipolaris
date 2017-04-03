@@ -18,28 +18,20 @@ public:
 
 	INLINE void print(ostream &o) const {
 		o << "[ SubExprWorkspace: ";
-//		for (set<Expression*>::iterator outIter = outSet.begin(); outIter != outSet.end(); ++outIter) {
-//			Expression* outExpr = *outIter;
-//
-//			o << *outExpr << " ";
-//		}
 
-//		o << prevCopyRefStmt->tag() << endl;
+		if (prevCopyRefStmt != NULL) {
+		    o << prevCopyRefStmt->tag() << endl;
+		}
 
 		o << "]" << endl;
 	}
 
 	INLINE int structures_OK() const { return 1; };
 
-	set<Expression*> inSet;
-	set<Expression*> outSet;
-
 	Expression* targetExpr;
-
 	Statement* prevCopyRefStmt;
 
 	set<Statement*> dominators;
-
 	Statement* idom;
 };
 
