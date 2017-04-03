@@ -1,4 +1,5 @@
 #include <map>
+#include <queue>
 #include <vector>
 #include <sstream>
 #include "Statement/AssignmentStmt.h"
@@ -124,6 +125,41 @@ void replace_expression_in_stmt(Statement* stmt, Expression* oldExpr, Expression
 	stmt->build_refs();
 }
 
+Statement* find_closest_common_dominator(set<Statement*> stmts) {
+	set<Statement*> commonDominators;
+
+	int stmtIdx = 0;
+
+	// Create a common set of dominators
+	for (set<Statement*>::iterator stmtIter = stmts.begin();
+		stmtIter != stmts.end();
+		++stmtIter) {
+
+		Statement* stmt = *stmtIter;
+		SubExprWorkspace* ws = get_workspace(*stmt);
+
+		if (stmtIdx == 0) {
+			commonDominators = ws->dominators;
+		} else {
+			set_intersect(commonDominators, ws->dominators);
+		}
+
+		stmtIdx++;
+	}
+
+	// From any of the nodes, traverse the immediate dominator iteratively until we meet an element in the
+	// common dominator set. That node is the closest common dominator of all the statements.
+	Statement* runner = *stmts.begin();
+
+	while (commonDominators.count(runner) == 0) {
+		SubExprWorkspace* runnerWS = get_workspace(*runner);
+
+		runner = runnerWS->idom;
+	}
+
+	return runner;
+}
+
 Expression* create_intermediate_expr(OP_TYPE op, Expression* op1, Expression* op2 = NULL) {
 	switch (op) {
 	case NOT_OP:
@@ -154,6 +190,94 @@ Expression* create_intermediate_expr(OP_TYPE op, Expression* op1, Expression* op
 			op1->clone(),
 			op2->clone()
 		);
+	}
+}
+
+void compute_dominance(ProgramUnit& pgm) {
+	StmtList& stmts = pgm.stmts();
+
+	for (Iterator<Statement> stmtIter = stmts; stmtIter.valid(); ++stmtIter) {
+		Statement& stmt = stmtIter.current();
+		SubExprWorkspace* ws = get_workspace(stmt);
+
+		for (Iterator<Statement> initDomIter = stmts; initDomIter.valid(); ++initDomIter) {
+			Statement& initDomStmt = initDomIter.current();
+
+			ws->dominators.insert(&initDomStmt);
+		}
+	}
+
+	queue<Statement*> workList;
+	workList.push(&stmts[0]);
+
+	while (!workList.empty()) {
+		Statement* currStmt = workList.front();
+		SubExprWorkspace* currWS = get_workspace(*currStmt);
+
+		workList.pop();
+
+		set<Statement*> newDominators;
+
+		int predIdx = 0;
+		for (Iterator<Statement> predIter = currStmt->pred(); predIter.valid(); ++predIter) {
+			Statement& predStmt = predIter.current();
+			SubExprWorkspace* predWS = get_workspace(predStmt);
+
+			if (predIdx == 0) {
+				newDominators = predWS->dominators;
+			} else {
+				set_intersect(newDominators, predWS->dominators);
+			}
+
+			predIdx++;
+		}
+
+		newDominators.insert(currStmt);
+
+		if (!set_equal(newDominators, currWS->dominators)) {
+			currWS->dominators = newDominators;
+
+			for (Iterator<Statement> succIter = currStmt->succ(); succIter.valid(); ++succIter) {
+
+				Statement& succStmt = succIter.current();
+				workList.push(&succStmt);
+			}
+		}
+	}
+
+	for (Iterator<Statement> stmtIter = stmts; stmtIter.valid(); ++stmtIter) {
+		Statement& stmt = stmtIter.current();
+		SubExprWorkspace* ws = get_workspace(stmt);
+
+		Statement* runner = &stmt;
+
+		while (runner != NULL) {
+			RefSet<Statement> predStmts = runner->pred();
+
+			if (predStmts.entries() == 0) {
+				break;
+			}
+
+			runner = &predStmts._element(0);
+
+			if (ws->dominators.count(runner) > 0) {
+				break;
+			}
+		}
+
+//		cout << stmt.tag() << "'s dominators: ";
+
+		if (&stmt != runner) {
+			ws->idom = runner;
+
+//			cout << ws->idom->tag() << endl;
+		}
+
+//		for (set<Statement*>::iterator domIter = ws->dominators.begin(); domIter != ws->dominators.end(); ++domIter) {
+//			cout << (*domIter)->tag() << " ";
+//		}
+
+//		cout << endl << " and idom is " << ws->idom->tag();
 	}
 }
 
@@ -489,8 +613,45 @@ void _eliminate_common_subexpr_in_stmt(Statement& defStmt, ProgramUnit& pgm) {
 	}
 }
 
+//void insert_precomputed_common_subexpression(Expression* commonExpr, Statement* refStmt) {
+//
+//}
+
 void eliminate_common_subexpr(ProgramUnit& pgm) {
 	StmtList& stmts = pgm.stmts();
+
+	for (map<string, set<Statement*>* >::iterator exprIter = exprStmtLookup.begin();
+		exprIter != exprStmtLookup.end();
+		++exprIter) {
+		set<Statement*>* stmtsWithCommonExpr = exprIter->second;
+
+		if (stmtsWithCommonExpr->size() <= 1) {
+			continue;
+		}
+
+		Statement* anyStmtWithCommonExpr = *stmtsWithCommonExpr->begin();
+		SubExprWorkspace* ws = get_workspace(*anyStmtWithCommonExpr);
+		Expression* targetExpr = ws->targetExpr;
+
+		Statement* closestCommonDominator = find_closest_common_dominator(*stmtsWithCommonExpr);
+
+		Expression* preComputedExpr = new_variable(new_temp_variable_name(), targetExpr->type(), pgm);
+		Expression* rhs = targetExpr->clone();
+
+		Statement* preComputedStmt = new AssignmentStmt(stmts.new_tag(), preComputedExpr, rhs);
+		stmts.ins_before(preComputedStmt, closestCommonDominator);
+
+		for (set<Statement*>::iterator commonExprIter = stmtsWithCommonExpr->begin();
+			commonExprIter != stmtsWithCommonExpr->end();
+			++commonExprIter) {
+			Statement* commonExprStmt = *commonExprIter;
+			SubExprWorkspace* commonExprStmtWS = get_workspace(*commonExprStmt);
+
+			replace_expression_in_stmt(commonExprStmt, commonExprStmtWS->targetExpr, preComputedExpr);
+
+			commonExprStmtWS->targetExpr = NULL;
+		}
+	}
 
 	/*
 	for (Iterator<Statement> stmtIter = stmts; stmtIter.valid(); ++stmtIter) {
@@ -499,18 +660,6 @@ void eliminate_common_subexpr(ProgramUnit& pgm) {
 		eliminate_common_subexpr_in_stmt(stmt, pgm);
 	}
 	*/
-
-	for (map<string, set<Statement*>* >::iterator it = exprStmtLookup.begin(); it != exprStmtLookup.end(); ++it) {
-		cout << "For expr " << it->first << endl;
-
-		set<Statement*>* stmts = it->second;
-
-		for (set<Statement*>::iterator itt = stmts->begin(); itt != stmts->end(); ++itt) {
-			cout << (*itt)->tag() << endl;
-		}
-
-		cout << "----------------------" << endl;
-	}
 }
 
 void propagate_copies(ProgramUnit& pgm) {
@@ -553,6 +702,7 @@ void propagate_copies(ProgramUnit& pgm) {
 
 void subexpr_elimination(ProgramUnit& pgm,
                          List<BasicBlock> * pgm_basic_blocks) {
+	compute_dominance(pgm);
 
 	binarify_operations(pgm);
 

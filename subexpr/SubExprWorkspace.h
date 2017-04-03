@@ -12,7 +12,7 @@
 
 class SubExprWorkspace : public WorkSpace {
 public:
-	SubExprWorkspace(int pass_tag) : WorkSpace(pass_tag), targetExpr(NULL), prevCopyRefStmt(NULL) {}
+	SubExprWorkspace(int pass_tag) : WorkSpace(pass_tag), targetExpr(NULL), prevCopyRefStmt(NULL), idom(NULL) {}
 
 	Listable *listable_clone() const { return NULL; };
 
@@ -37,6 +37,10 @@ public:
 	Expression* targetExpr;
 
 	Statement* prevCopyRefStmt;
+
+	set<Statement*> dominators;
+
+	Statement* idom;
 };
 
 #endif /* SUBEXPR_SUBEXPRWORKSPACE_H_ */
