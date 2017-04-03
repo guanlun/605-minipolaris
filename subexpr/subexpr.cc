@@ -17,11 +17,30 @@ int variableNameNum = 1;
 map<string, set<Statement*>* > exprStmtLookup;
 map<Statement*, SubExprWorkspace*> wsLookup;
 
+bool is_stmt_with_named_func(Statement& stmt, const char* name) {
+    if (stmt.stmt_class() != ASSIGNMENT_STMT) {
+        return false;
+    }
+
+    const Expression& rhs = stmt.rhs();
+
+    if (rhs.op() != FUNCTION_CALL_OP) {
+        return false;
+    }
+
+    const Expression& func = rhs.function();
+
+    return (strcmp(func.symbol().name_ref(), name) == 0);
+}
+
+bool is_phi_stmt(Statement& stmt) {
+    return is_stmt_with_named_func(stmt, "PHI");
+}
+
 const char* new_temp_variable_name() {
 	stringstream ss;
 
-	ss << "__newvar" << variableNameNum;
-
+	ss << "__temp" << variableNameNum;
 	variableNameNum++;
 
 	return ss.str().c_str();
@@ -58,11 +77,6 @@ bool set_equal(set<T>& s1, set<T>& s2) {
     }
 
     return true;
-}
-
-bool expr_eq(Expression& e1, Expression& e2) {
-	// TODO: different cases
-	return (e1 == e2);
 }
 
 SubExprWorkspace* get_workspace(Statement& stmt) {
@@ -266,19 +280,9 @@ void compute_dominance(ProgramUnit& pgm) {
 			}
 		}
 
-//		cout << stmt.tag() << "'s dominators: ";
-
 		if (&stmt != runner) {
 			ws->idom = runner;
-
-//			cout << ws->idom->tag() << endl;
 		}
-
-//		for (set<Statement*>::iterator domIter = ws->dominators.begin(); domIter != ws->dominators.end(); ++domIter) {
-//			cout << (*domIter)->tag() << " ";
-//		}
-
-//		cout << endl << " and idom is " << ws->idom->tag();
 	}
 }
 
@@ -308,10 +312,6 @@ Expression* binary_conversion_helper(
 			newExprs.push_back(&argExpr);
 		}
 	}
-
-//	cout << expr << " is simple? " << ((argCount <= 2) && !hasNestedExpr) << endl;
-//	cout << argCount << " " << hasNestedExpr << endl;
-//	cout << "top level?" << isTopLevel << endl;
 
 	if (isTopLevel && (argCount <= 2) && !hasNestedExpr) {
 		return &expr;
@@ -343,6 +343,8 @@ Expression* binary_conversion_helper(
 
 			intermediateStmt = new AssignmentStmt(pgm.stmts().new_tag(), preComputedExpr, newExpr);
 			intermediateStmts.push_back(intermediateStmt);
+
+			lastPreComputedExpr = preComputedExpr;
 		}
 	}
 
@@ -433,18 +435,6 @@ set<Expression*> compute_targeted_exprs(StmtList& stmts) {
 		}
 	}
 
-//	for (map<string, set<Statement*>* >::iterator it = exprStmtLookup.begin(); it != exprStmtLookup.end(); ++it) {
-//		cout << "For expr " << it->first << endl;
-//
-//		set<Statement*>* stmts = it->second;
-//
-//		for (set<Statement*>::iterator itt = stmts->begin(); itt != stmts->end(); ++itt) {
-//			cout << (*itt)->tag() << endl;
-//		}
-//
-//		cout << "----------------------" << endl;
-//	}
-
 	return exprs;
 }
 
@@ -457,9 +447,12 @@ void eliminate_common_subexpr(ProgramUnit& pgm) {
 		exprIter != exprStmtLookup.end();
 		++exprIter) {
 		set<Statement*>* stmtsWithCommonExpr = exprIter->second;
+
 		if (stmtsWithCommonExpr->size() <= 1) {
 			continue;
 		}
+
+		cout << "at least 2 uses: " << exprIter->first << endl;
 
 		Statement* anyStmtWithCommonExpr = *stmtsWithCommonExpr->begin();
 		SubExprWorkspace* ws = get_workspace(*anyStmtWithCommonExpr);
@@ -485,6 +478,38 @@ void eliminate_common_subexpr(ProgramUnit& pgm) {
 	}
 }
 
+void _propagate_copies(ProgramUnit& pgm) {
+    StmtList& stmts = pgm.stmts();
+
+    RefSet<Statement> stmtsToDelete;
+
+    for (Iterator<Statement> stmtIter = stmts.stmts_of_type(ASSIGNMENT_STMT); stmtIter.valid(); ++stmtIter) {
+        Statement& stmt = stmtIter.current();
+
+        SubExprWorkspace* ws = get_workspace(stmt);
+
+        Statement* prevStmt = ws->prevCopyRefStmt;
+
+        if (prevStmt == NULL) {
+            continue;
+        }
+
+        Expression& definedExprInPrevStmt = prevStmt->lhs();
+        replace_expression_in_stmt(&stmt, &definedExprInPrevStmt, prevStmt->rhs().clone());
+
+        stmt.build_refs();
+
+//        stmtsToDelete.ins(*prevStmt);
+        cout << *prevStmt << endl;
+//        stmts.del(*prevStmt);
+
+    }
+
+//    cout << stmtsToDelete << endl;
+
+//    stmts.del(stmtsToDelete);
+}
+
 void propagate_copies(ProgramUnit& pgm) {
 	StmtList& stmts = pgm.stmts();
 
@@ -499,44 +524,49 @@ void propagate_copies(ProgramUnit& pgm) {
 			continue;
 		}
 
+		bool used = false;
+
 		for (Iterator<Statement> useIter = stmts; useIter.valid(); ++useIter) {
 			Statement& useStmt = useIter.current();
+
+			if (is_phi_stmt(useStmt)) {
+			    continue;
+			}
 
 			for (Mutator<Expression> inIter = useStmt.in_refs(); inIter.valid(); ++inIter) {
 				Expression& inExpr = inIter.current();
 
 				if (inExpr == definedVar) {
-//					cout << "Found use of var " << inExpr << " in " << useStmt.tag() << endl;
+					cout << "Found use of var " << inExpr << " in " << useStmt << endl;
 
 					inIter.assign() = copiedVar.clone();
+
+					used = true;
 				}
 			}
 
 			useStmt.build_refs();
 		}
 
-//		cout << "should be deleted: " << defStmt << endl;
+		cout << "should be deleted: " << defStmt << endl;
 
-//		stmts.del(defStmt);
+		if (used) {
+		    stmts.del(defStmt);
+		}
 	}
 }
 
 void subexpr_elimination(ProgramUnit& pgm,
                          List<BasicBlock> * pgm_basic_blocks) {
 	StmtList& stmts = pgm.stmts();
-	binarify_operations(pgm);
 
-	for (Iterator<Statement> stmtIter = stmts; stmtIter.valid(); ++stmtIter) {
-	    Statement& stmt = stmtIter.current();
-	    SubExprWorkspace* ws = get_workspace(stmt);
-
-	    cout << stmt.tag() << ": " << *ws << endl;
-	}
 
 	bool changed;
 	do {
-	    cout << "new iteration" << endl;
 	    changed = false;
+	    cout << "new iteration" << endl;
+
+	    binarify_operations(pgm);
 
 //        List<Statement>* oldStmts = stmts.copy(stmts.first(), stmts.last());
 
@@ -545,7 +575,7 @@ void subexpr_elimination(ProgramUnit& pgm,
 
         compute_dominance(pgm);
         eliminate_common_subexpr(pgm);
-        propagate_copies(pgm);
+        _propagate_copies(pgm);
 
         stringstream newStmtsStr;
         pgm.stmts().write(newStmtsStr);
@@ -562,5 +592,4 @@ void subexpr_elimination(ProgramUnit& pgm,
 //            }
 //        }
 	} while (changed);
-
 }
