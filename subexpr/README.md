@@ -35,3 +35,62 @@ As Fortran might alter the value of actual parameters, `foo(i, j)` should not be
 Copy propagation is implemented using a simple method: whenever we find a copy assignment `x3 = y2` (SSA form), we replace every `x3` with `y2` in the entire program. Since the program is in SSA form, every `x3` should hold the same value as `y2`.
 
 The more advanced form of copy propagation that requires tagging the generated subexpressions is not implemented.
+
+### Example
+For this program:
+
+    program name 
+    integer*4 i, j,a ,b ,c
+    i = 3
+    j = 4
+    a = i + j + c
+    j = i + j
+    b = j + i
+    c = i + j + d
+    a = b - c
+    j = j
+    end 
+
+After common subexpression elimination (before copy propagation), the program would be:
+
+    PROGRAM name
+    EXTERNAL phi
+    INTEGER*4 a, b, c, i, j, phi, __temp1, __temp2, __temp3, __temp5
+    INTEGER*4 __temp6
+    REAL*8 d, __temp4
+    i = 3
+    j = 4
+    __temp5 = i+j
+    __temp1 = __temp5
+    __temp2 = c+__temp1
+    a = __temp2
+    j = __temp5
+    __temp6 = i+j
+    b = __temp6
+    __temp3 = __temp6
+    __temp4 = __temp3+d
+    c = __temp4
+    a = b-c
+    j = j
+    STOP 
+    END
+
+The final output after copy propagation would be:
+
+    PROGRAM name
+    EXTERNAL phi
+    INTEGER*4 a, b, c, i, j, phi, __temp1, __temp2, __temp3, __temp5
+    INTEGER*4 __temp6
+    REAL*8 d, __temp4
+    i = 3
+    j = 4
+    __temp5 = i+j
+    __temp2 = c+__temp5
+    a = __temp2
+    __temp6 = i+__temp5
+    __temp4 = __temp6+d
+    a = __temp6-__temp4
+    j = __temp5
+    STOP 
+    END
+
