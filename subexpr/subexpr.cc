@@ -80,8 +80,16 @@ bool set_equal(set<T>& s1, set<T>& s2) {
 }
 
 bool expr_eq(Expression& e1, Expression& e2) {
-	// TODO: different cases
-	return (e1 == e2);
+	if (e1 == e2) {
+	    return true;
+	} else {
+	    stringstream s1, s2;
+
+	    e1.print(s1);
+	    e2.print(s2);
+
+	    return (s1.str() == s2.str());
+	}
 }
 
 SubExprWorkspace* get_workspace(Statement& stmt) {
@@ -125,8 +133,6 @@ bool is_targeted_expr(Expression& expr) {
 }
 
 Expression* replace_expression(Expression* expr, Expression* oldExpr, Expression* newExpr) {
-//    cout << "recur " << endl;
-//    cout << *oldExpr << " " << *newExpr << endl;
 	if (*expr == *oldExpr) {
 		return newExpr->clone();
 	} else {
@@ -139,8 +145,6 @@ Expression* replace_expression(Expression* expr, Expression* oldExpr, Expression
 }
 
 void replace_expression_in_stmt(Statement* stmt, Expression* oldExpr, Expression* newExpr) {
-    stmt->build_refs();
-//    cout << "replaceing " << *oldExpr << " with " << *newExpr << " in " << *stmt << endl;
 	for (Mutator<Expression> exprIter = stmt->iterate_expressions(); exprIter.valid(); ++exprIter) {
 		Expression& expr = exprIter.current();
 		exprIter.assign() = replace_expression(&expr, oldExpr, newExpr);
@@ -184,7 +188,6 @@ Statement* find_closest_common_dominator(set<Statement*> stmts) {
 }
 
 Expression* create_intermediate_expr(OP_TYPE op, Expression* op1, Expression* op2 = NULL) {
-    cout << op << " " << *op1 << " " << *op2 << endl;
 	switch (op) {
 	case NOT_OP:
 		return new UnaryExpr(
@@ -313,24 +316,18 @@ Expression* binary_conversion_helper(
 
 	bool hasNestedExpr = false;
 
-	cout << "arg list: " << endl;
-	cout << expr.arg_list() << endl;
-
 	for (Iterator<Expression> argIter = expr.arg_list(); argIter.valid(); ++argIter) {
 		Expression& argExpr = argIter.current();
 
-		cout << argExpr.arg_list() << endl;
-		cout << "params: " << argExpr.parameters_guarded() << endl;
-
-		if (argExpr.arg_list().entries() > 1) {
-			// Nested expression
-			hasNestedExpr = true;
-
-			Expression* intermediateExpr = binary_conversion_helper(argExpr, intermediateStmts, pgm);
-			newExprs.push_back(intermediateExpr);
+		if ((argExpr.arg_list().entries() <= 1) || (argExpr.op() == FUNCTION_CALL_OP)) {
+            // Single expression
+            newExprs.push_back(&argExpr);
 		} else {
-			// Single expression
-			newExprs.push_back(&argExpr);
+		    // Nested expression
+            hasNestedExpr = true;
+
+            Expression* intermediateExpr = binary_conversion_helper(argExpr, intermediateStmts, pgm);
+            newExprs.push_back(intermediateExpr);
 		}
 	}
 
@@ -405,7 +402,9 @@ void convert_to_binary_operation(Statement& stmt, ProgramUnit& pgm) {
 
 			ws->prevCopyRefStmt = prevCopyStmt;
 
-			replace_expression_in_stmt(&stmt, &expr, lastIntermediateExpr);
+			if (!expr_eq(expr, *lastIntermediateExpr)) {
+			    replace_expression_in_stmt(&stmt, &expr, lastIntermediateExpr);
+			}
 		}
 	}
 }
@@ -506,7 +505,6 @@ void propagate_copies(ProgramUnit& pgm) {
 		Expression& copiedVar = defStmt.rhs();
 		Expression& definedVar = defStmt.lhs();
 
-		// TODO: arrays
 		if (defStmt.rhs().op() != ID_OP) {
 			continue;
 		}
@@ -554,9 +552,7 @@ bool stmts_equal(List<Statement>& stmts1, List<Statement>& stmts2) {
         s1.write(sstream1, indent1);
         s2.write(sstream2, indent2);
 
-//        if (sstream1.str() != sstream2.str()) {
         if (s1.stmt_class() != s2.stmt_class()) {
-//            cout << sstream1.str() << " " << sstream2.str() << endl;
             return false;
         }
     }
@@ -571,7 +567,6 @@ void subexpr_elimination(ProgramUnit& pgm,
 	bool changed;
 	do {
 	    changed = false;
-	    cout << "new iteration --------------------------------------------" << endl;
 
 	    binarify_operations(pgm);
 
@@ -589,4 +584,14 @@ void subexpr_elimination(ProgramUnit& pgm,
 
         changed = !stmts_equal(*oldStmts, pgm.stmts());
 	} while (changed);
+}
+
+void print_available_subexpressions(ostream& o) {
+    o << "Available subexpressions:" << endl;
+
+    for (map<string, set<Statement*>* >::iterator exprIter = exprStmtLookup.begin();
+        exprIter != exprStmtLookup.end();
+        ++exprIter) {
+        o << exprIter->first << endl;
+    }
 }

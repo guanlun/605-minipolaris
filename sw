@@ -68,6 +68,7 @@ print        1  print program at the end (1 == Fortran form, 2 == all fields)
 
 subexpr      1
 availexpr    1
-p_subexpr    1
+p_subexpr    2
+p_avail      1
 
 p_ddtest     0
