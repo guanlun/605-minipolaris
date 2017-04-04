@@ -83,6 +83,7 @@ bool is_phi_stmt_for_function(Statement& stmt) {
 }
 
 void compute_dominance(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {
+    cout << 11 << endl;
     for (Iterator<BasicBlock> bbIter = *basicBlocks; bbIter.valid(); ++bbIter) {
         BasicBlock& bb = bbIter.current();
 
@@ -92,16 +93,19 @@ void compute_dominance(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {
             bb.dominators.insert(&initBB);
         }
     }
+    cout << 22 << endl;
 
     queue<BasicBlock*> workList;
     workList.push(basicBlocks->first_ref());
 
     while (!workList.empty()) {
+        cout << workList.size() << endl;
         BasicBlock* currNode = workList.front();
         workList.pop();
 
         set<BasicBlock*> newDominators;
 
+        cout << "a" << endl;
         for (int predIdx = 0; predIdx < currNode->predecessors.entries(); predIdx++) {
             BasicBlock& predBB = currNode->predecessors[predIdx];
 
@@ -111,6 +115,7 @@ void compute_dominance(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {
                 set_intersect(newDominators, predBB.dominators);
             }
         }
+        cout << "b" << endl;
 
         newDominators.insert(currNode);
 
@@ -123,13 +128,16 @@ void compute_dominance(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {
                 workList.push(&succBB);
             }
         }
+        cout << "c" << endl;
     }
+    cout << "ooo" << endl;
 
     for (Iterator<BasicBlock> bbIter = *basicBlocks; bbIter.valid(); ++bbIter) {
         BasicBlock& bb = bbIter.current();
 
         BasicBlock* runner = &bb;
         while (runner != NULL) {
+            cout << runner << endl;
             RefList<BasicBlock&>& predBBs = runner->predecessors;
             if (predBBs.entries() == 0) {
                 break;
@@ -141,6 +149,7 @@ void compute_dominance(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {
                 break;
             }
         }
+        cout << "out of loop" << endl;
 
         if (&bb != runner) {
             bb.immediateDominator = runner;
@@ -160,6 +169,7 @@ void compute_dominance(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {
                 BasicBlock* runner = &predBB;
 
                 while ((runner != NULL) && (runner != bb.immediateDominator)) {
+                    cout << *runner << endl;
                     runner->dominanceFrontiers.insert(&bb);
                     runner = runner->immediateDominator;
                 }

@@ -1,17 +1,10 @@
-        PROGRAM TEST4
-        INTEGER*4 i,j, n
-        DATA l /4/
-        i = 4
-        j = i + 5
-        a = 4
-        b = 6
-       IF ( s .EQ. 5) THEN
-         a = i + j
-        ELSE
-         b = i + j
-        ENDIF
-        s = i + j
-        s = s + a + b
-        PRINT *, j
-        STOP
-        END
+
+       PROGRAM TESTFUNC
+       INTEGER x, y, tmp, a, b, c, ifoo
+       DATA x/2/, y/2/
+       COMMON /area1/a,b
+
+       c = 2 + ifoo(x, y)
+
+       STOP
+       END
