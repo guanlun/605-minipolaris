@@ -405,7 +405,7 @@ const char* new_name(Symbol* sym, map<Symbol*, vector<int> >& variableNumLookup,
     return ss.str().c_str();
 }
 
-const char* current_name(Symbol* sym, map<Symbol*, vector<int> >& variableNumLookup) {
+const char* current_name(Symbol* sym, map<Symbol*, vector<int> >& variableNumLookup, int incOffset = 0) {
 
     map<Symbol*, vector<int> >::iterator vnIter = variableNumLookup.find(sym);
 
@@ -417,7 +417,7 @@ const char* current_name(Symbol* sym, map<Symbol*, vector<int> >& variableNumLoo
     vector<int>& numStack = vnIter->second;
 
     stringstream ss;
-    ss << sym->name_ref() << "@" << numStack.back();
+    ss << sym->name_ref() << "@" << (numStack.back() + incOffset);
 
     return ss.str().c_str();
 }
@@ -433,7 +433,7 @@ char* orig_symbol_name(Symbol& symbol) {
     return origName;
 }
 
-void populate_phi_args(Statement& phiStmt, map<Symbol*, vector<int> >& variableNumLookup) {
+void populate_phi_args(Statement& phiStmt, map<Symbol*, vector<int> >& variableNumLookup, Expression* doIndexExpr) {
     if (is_phi_stmt_for_function(phiStmt)) {
         // No need to populate phi statements for function again
         return;
@@ -447,13 +447,34 @@ void populate_phi_args(Statement& phiStmt, map<Symbol*, vector<int> >& variableN
 
     char* origName = orig_symbol_name(phiSymbol);
 
+    int varNameCountOffset = 0;
+
+    if (doIndexExpr != NULL) {
+        // PHI expression is for a DO loop
+        char* doIndexName = orig_symbol_name(doIndexExpr->symbol());
+
+        // If the targeted PHI expression is for the DO loop index variable, and that it's the first time we're
+        // populating this PHI expression, increment the index by one because we haven't reached the DO stmt yet
+        // in the predecessor statements, and that DO stmt would assign to that variable.
+        //
+        // Example:
+        // begin
+        // do i = 1, 10, 1
+        //   j = 1
+        // enddo
+        if ((phiParams.arg_list().entries() == 0) && (strcmp(origName, doIndexName) == 0)) {
+            varNameCountOffset = 1;
+        }
+    }
+
     for (map<Symbol*, vector<int> >::iterator mapIter = variableNumLookup.begin();
          mapIter != variableNumLookup.end();
          ++mapIter) {
         Symbol* key = mapIter->first;
 
         if (strcmp(key->name_ref(), origName) == 0) {
-            const char* phiArgName = current_name(key, variableNumLookup);
+            const char* phiArgName = current_name(key, variableNumLookup, varNameCountOffset);
+            cout << "Current name: " << phiArgName << endl;
             Symbol* phiArgSymbol = key->clone();
             phiArgSymbol->name(phiArgName);
 
@@ -570,18 +591,30 @@ void variable_renaming_helper(
         }
     }
 
-    // Iterate each successor in the CFG
+    // Iterate each successor in the CFG and populate any PHI statements in the successor blocks with the
+    // variable names in the current block.
     for (int succIdx = 0; succIdx < bb->successors.entries(); succIdx++) {
         BasicBlock& succBB = bb->successors[succIdx];
 
-        for (int stmtIdx = 0; stmtIdx < succBB.stmts.entries(); stmtIdx++) {
-            Statement& stmt = succBB.stmts[stmtIdx];
+        // Special handling needed when populating a block that consists of a DO stmt and several PHI stmts,
+        // because we haven't visited the DO stmt yet and cannot determine for the name of the loop index
+        // variable.
+        // Note that a DO stmt should itself be a BB (together with the loop header PHI stmts).
+        Expression* doIndexExpr = NULL;
 
-            if (!is_phi_stmt(stmt)) {
+        for (int stmtIdx = 0; stmtIdx < succBB.stmts.entries(); stmtIdx++) {
+            Statement& succBBStmt = succBB.stmts[stmtIdx];
+
+            if (succBBStmt.stmt_class() == DO_STMT) {
+                // Block is for a DO stmt
+                doIndexExpr = &succBBStmt.index();
+            }
+
+            if (!is_phi_stmt(succBBStmt)) {
                 continue;
             }
 
-            populate_phi_args(stmt, variableNumLookup);
+            populate_phi_args(succBBStmt, variableNumLookup, doIndexExpr);
         }
     }
 

@@ -66,9 +66,9 @@ p_subst_fld  0  print the substituted field for IDExprs (debug)
 p_scan       2  print after scanner (1 == Fortran form, 2 == all fields)
 print        1  print program at the end (1 == Fortran form, 2 == all fields)
 
-subexpr      1
-availexpr    1
-p_subexpr    2
-p_avail      1
+subexpr      0
+availexpr    0
+p_subexpr    0
+p_avail      0
 
-p_ddtest     0
+p_ddtest     1

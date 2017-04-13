@@ -17,6 +17,16 @@ set<Expression*> uses;
 map<Expression*, Statement*> fudChains;
 map<Expression*, vector<Statement*> > phiChains;
 
+void preprocess(ProgramUnit& pgm) {
+    StmtList& stmts = pgm.stmts();
+
+    for (Iterator<Statement> stmtIter = stmts; stmtIter.valid(); ++stmtIter) {
+        Statement& stmt = stmtIter.current();
+
+        stmt.build_refs();
+    }
+}
+
 void find_LHPs(ProgramUnit& pgm) {
     StmtList& stmts = pgm.stmts();
 
@@ -39,6 +49,14 @@ void build_fud_chains(ProgramUnit& pgm) {
     for (Iterator<Statement> useStmtIter = stmts; useStmtIter.valid(); ++useStmtIter) {
         Statement& useStmt = useStmtIter.current();
 
+        bool isPhi = is_phi_stmt(useStmt);
+
+//        for (Iterator<Expression> exprIter = useStmt.iterate_expressions(); exprIter.valid(); ++exprIter) {
+//            Expression& expr = exprIter.current();
+//
+//            cout << expr << " is at " << &expr << endl;
+//        }
+
         for (Iterator<Expression> useExprIter = useStmt.in_refs(); useExprIter.valid(); ++useExprIter) {
             Expression& useExpr = useExprIter.current();
             uses.insert(&useExpr);
@@ -47,7 +65,11 @@ void build_fud_chains(ProgramUnit& pgm) {
                 Statement& defStmt = defStmtIter.current();
 
                 if (defStmt.lhs() == useExpr) {
-                    fudChains[&useExpr] = &defStmt;
+                    if (isPhi) {
+//                        phiChains[&useExpr] = &defStmt;
+                    } else {
+                        fudChains[&useExpr] = &defStmt;
+                    }
                 }
             }
         }
@@ -81,6 +103,8 @@ void find_scalar_dd(ProgramUnit& pgm) {
 void ddtest(ProgramUnit & pgm)
 {
     int a;
+
+    preprocess(pgm);
 
     find_LHPs(pgm);
 
