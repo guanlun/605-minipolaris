@@ -17,3 +17,20 @@ bool is_stmt_with_named_func(Statement& stmt, const char* name) {
 bool is_phi_stmt(Statement& stmt) {
     return is_stmt_with_named_func(stmt, "PHI");
 }
+
+Expression* get_def_expr(Statement& stmt) {
+    switch (stmt.stmt_class()) {
+    case ASSIGNMENT_STMT:
+        return &stmt.lhs();
+    case DO_STMT:
+        return &stmt.index();
+    default:
+        return NULL;
+    }
+}
+
+void tab(int n) {
+    for (int i = 0; i < n; i++) {
+        cout << "    ";
+    }
+}

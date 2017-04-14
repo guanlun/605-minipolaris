@@ -474,7 +474,7 @@ void populate_phi_args(Statement& phiStmt, map<Symbol*, vector<int> >& variableN
 
         if (strcmp(key->name_ref(), origName) == 0) {
             const char* phiArgName = current_name(key, variableNumLookup, varNameCountOffset);
-            cout << "Current name: " << phiArgName << endl;
+
             Symbol* phiArgSymbol = key->clone();
             phiArgSymbol->name(phiArgName);
 
