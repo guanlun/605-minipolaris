@@ -36,7 +36,15 @@ map<Statement*, vector<Expression*>* > reaching;
 map<Statement*, bool> self;
 map<Expression*, Statement*> exprStmtLookup;
 
+map<Expression*, vector<Expression*>* > currUse;
+map<Expression*, vector<Expression*>* > chainUse;
+map<Expression*, vector<Expression*>* > saveChainUse;
+
 set<DataDependence*> dependencies;
+
+void add_dependence(Statement* depended, Statement* depending) {
+    dependencies.insert(new DataDependence(depended, depending));
+}
 
 void preprocess(ProgramUnit& pgm) {
     StmtList& stmts = pgm.stmts();
@@ -138,6 +146,42 @@ void build_fud_chains(ProgramUnit& pgm) {
     }
 }
 
+void upsilon_search(Statement* x) {
+    cout << "Search stmt: " << x->tag() << endl;
+
+    if (is_phi_stmt(*x)) {
+        Expression* m = &x->lhs();
+        vector<Expression*> currUseM = *currUse[m];
+//        saveChainUse[m] = currUseM;
+
+
+    } else {
+
+    }
+}
+
+void build_frud_chains(ProgramUnit& pgm) {
+    StmtList& stmts = pgm.stmts();
+
+    for (Iterator<Statement> stmtIter = stmts; stmtIter.valid(); ++stmtIter) {
+        Statement& stmt = stmtIter.current();
+
+        for (Iterator<Expression> inIter = stmt.in_refs(); inIter.valid(); ++inIter) {
+            Expression& inExpr = inIter.current();
+
+            currUse[&inExpr] = new vector<Expression*>;
+        }
+
+        for (Iterator<Expression> outIter = stmt.out_refs(); outIter.valid(); ++outIter) {
+            Expression& outExpr = outIter.current();
+
+            currUse[&outExpr] = new vector<Expression*>;
+        }
+    }
+
+    upsilon_search(&stmts[0]);
+}
+
 void find_reaching(Expression* def, Statement* lhp, int depth = 0) {
     tab(depth);
 
@@ -158,8 +202,8 @@ void find_reaching(Expression* def, Statement* lhp, int depth = 0) {
         find_reaching(phiChain[0], lhp, depth + 1);
         find_reaching(phiChain[1], lhp, depth + 1);
     } else {
-        vector<Expression*> reachingDefs = *reaching[lhp];
-        reachingDefs.push_back(def);
+        vector<Expression*>* reachingDefs = reaching[lhp];
+        reachingDefs->push_back(def);
 
         // TODO: non-killing
     }
@@ -195,17 +239,25 @@ void find_dependence(Expression* def, Expression* use, int depth = 0) {
 
         find_dependence(phiChainLoopOutRef, use, depth + 1);
 
-        vector<Expression*> reachingDefs = *reaching[defStmt];
+        vector<Expression*>* reachingDefs = reaching[defStmt];
 
-        if (reachingDefs.empty()) {
+        if (reachingDefs->empty()) {
             find_reaching(phiChainLookInRef, defStmt, depth + 1);
         }
 
-        if (self[defStmt]) {
-            vector<Expression*> reachingDefs = *reaching[defStmt];
+        for (vector<Expression*>::iterator reachingIter = reachingDefs->begin(); reachingIter != reachingDefs->end(); ++reachingIter) {
+            Expression* reachingExpr = *reachingIter;
 
-        } else {
-            // TODO
+            Statement* reachingStmt = exprStmtLookup[reachingExpr];
+            Statement* useStmt = exprStmtLookup[use];
+
+            if (self[defStmt]) {
+                // TODO
+                add_dependence(reachingStmt, useStmt);
+            } else {
+                // TODO
+                add_dependence(reachingStmt, useStmt);
+            }
         }
 
     } else if (is_phi_stmt(*defStmt)) {
@@ -220,7 +272,7 @@ void find_dependence(Expression* def, Expression* use, int depth = 0) {
         tab(depth);
         cout << "is nothing" << endl;
 
-        dependencies.insert(new DataDependence(defStmt, exprStmtLookup[use]));
+        add_dependence(defStmt, exprStmtLookup[use]);
     }
 }
 
@@ -256,6 +308,111 @@ void find_scalar_dd(ProgramUnit& pgm) {
 
         dd->print(cout);
     }
+
+    cout << "Self: " << endl;
+    for (map<Statement*, bool>::iterator it = self.begin(); it != self.end(); ++it) {
+        cout << it->first->tag() << ": " << boolalpha << it->second << endl;
+    }
+
+    cout << "Reaching: " << endl;
+    for (map<Statement*, vector<Expression*>* >::iterator it = reaching.begin(); it != reaching.end(); ++it) {
+        cout << it->first->tag() << ": ";
+
+        vector<Expression*>* reachingDefs = it->second;
+
+        for (vector<Expression*>::iterator itt = reachingDefs->begin(); itt != reachingDefs->end(); ++itt) {
+            cout << **itt << endl;
+        }
+        cout << endl;
+    }
+}
+
+struct ArrayRefRecord {
+    Statement* stmt;
+    vector<Expression*> indices;
+};
+
+void find_array_dd_between_stmts(Statement& s1, Statement& s2) {
+    cout << s1.tag() << " " << s2.tag() << endl;
+
+    for (Iterator<Expression> e1Iter = s1.out_refs(); e1Iter.valid(); ++e1Iter) {
+        Expression& e1 = e1Iter.current();
+
+        if (e1.op() != ARRAY_REF_OP) {
+            continue;
+        }
+
+        Symbol* arrayBaseSym1 = e1.base_variable_ref();
+
+        for (Iterator<Expression> e2Iter = s2.in_refs(); e2Iter.valid(); ++e2Iter) {
+            Expression& e2 = e2Iter.current();
+
+            if (e2.op() != ARRAY_REF_OP) {
+                continue;
+            }
+
+            Symbol* arrayBaseSym2 = e2.base_variable_ref();
+
+            if (arrayBaseSym1 != arrayBaseSym2) {
+                continue;
+            }
+
+
+        }
+    }
+}
+
+void find_array_dd(ProgramUnit& pgm) {
+    StmtList& stmts = pgm.stmts();
+
+    for (Iterator<Statement> doStmtIter = stmts.stmts_of_type(DO_STMT); doStmtIter.valid(); ++doStmtIter) {
+        Statement& doStmt = doStmtIter.current();
+        
+        map<Symbol*, Statement*> readLookup;
+        map<Symbol*, Statement*> writeLookup;
+
+        for (Iterator<Statement> stmtIter1 = stmts.iterate_loop_body(&doStmt); stmtIter1.valid(); ++stmtIter1) {
+            Statement& stmt1 = stmtIter1.current();
+
+            for (Iterator<Statement> stmtIter2 = stmts.iterate_loop_body(&doStmt); stmtIter2.valid(); ++stmtIter2) {
+                Statement& stmt2 = stmtIter2.current();
+
+                if (stmts.index(stmt1) >= stmts.index(stmt2)) {
+                    // stmt1 should come before stmt2
+                    continue;
+                }
+
+                find_array_dd_between_stmts(stmt1, stmt2);
+            }
+
+//            for (Iterator<Expression> inExprIter = stmt1.in_refs(); inExprIter.valid(); ++inExprIter) {
+//                Expression& inExpr = inExprIter.current();
+//
+//                if (inExpr.op() == ARRAY_REF_OP) {
+//                    Symbol* arrayBaseSym = inExpr.base_variable_ref();
+//
+//                    readLookup[arrayBaseSym] = &stmt1;
+//                }
+//            }
+//
+//            for (Iterator<Expression> outExprIter = stmt1.out_refs(); outExprIter.valid(); ++outExprIter) {
+//                Expression& outExpr = outExprIter.current();
+//
+//                if (outExpr.op() == ARRAY_REF_OP) {
+//                    Symbol* arrayBaseSym = outExpr.base_variable_ref();
+//
+//                    writeLookup[arrayBaseSym] = &stmt1;
+//                }
+//            }
+        }
+
+//        for (map<Symbol*, Statement*>::iterator readIter = readLookup.begin(); readIter != readLookup.end(); ++readIter) {
+//            Symbol* readSymbol = readIter->first;
+//            Statement* readStmt = readIter->second;
+//
+//            cout << "read: " << *readSymbol << ": " << readStmt->tag() << endl;
+//        }
+    }
 }
 
 void ddtest(ProgramUnit & pgm)
@@ -269,4 +426,12 @@ void ddtest(ProgramUnit & pgm)
     build_fud_chains(pgm);
 
     find_scalar_dd(pgm);
+
+    cout << "For arrays: ------------------------------------------" << endl;
+    find_array_dd(pgm);
+
+
+
+    cout << "------------------------------------------------------" << endl;
+    build_frud_chains(pgm);
 }
