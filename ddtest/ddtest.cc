@@ -9,8 +9,15 @@
 #include "StmtList.h"
 #include "Collection/List.h"
 #include "Statement/Statement.h"
+#include "Expression/expr_funcs.h"
 
 #include "utils.cc"
+
+enum DEPENDENCE_TYPE {
+    FLOW,
+    OUTPUT,
+    ANTI
+};
 
 struct DataDependence {
     Statement* dependedStmt;
@@ -327,15 +334,88 @@ void find_scalar_dd(ProgramUnit& pgm) {
     }
 }
 
-struct ArrayRefRecord {
-    Statement* stmt;
-    vector<Expression*> indices;
-};
+void _test(Expression& expr, int& constItem, int& varItem, int coeff = 1) {
+    switch (expr.op()) {
+    case ID_OP:
+        varItem = coeff;
+        break;
+    case INTEGER_CONSTANT_OP:
+        constItem = coeff;
+        break;
+    case ADD_OP:
+        _test(expr.arg_list()[0], constItem, varItem, coeff);
+        _test(expr.arg_list()[1], constItem, varItem, coeff);
+        break;
+    case SUB_OP:
+        _test(expr.arg_list()[0], constItem, varItem, coeff);
+        _test(expr.arg_list()[1], constItem, varItem, -coeff);
+        break;
+    case MULT_OP:
+        Expression& sub1 = expr.arg_list()[0];
+        Expression& sub2 = expr.arg_list()[1];
 
-void find_array_dd_between_stmts(Statement& s1, Statement& s2) {
-    cout << s1.tag() << " " << s2.tag() << endl;
+        if (sub1.op() == INTEGER_CONSTANT_OP) {
+            _test(sub2, constItem, varItem, coeff * sub1.value());
+        } else {
+            _test(sub1, constItem, varItem, coeff * sub2.value());
+        }
+    }
+}
 
-    for (Iterator<Expression> e1Iter = s1.out_refs(); e1Iter.valid(); ++e1Iter) {
+void gcd_test(Expression& e1, Expression& e2) {
+    cout << "-------------------GCD test---------------------" << endl;
+
+    Expression& arg1 = e1.arg_list()[0];
+    Expression& arg2 = e2.arg_list()[0];
+
+    int constItem1 = 0;
+    int varItem1 = 0;
+    _test(arg1, constItem1, varItem1);
+
+    int constItem2 = 0;
+    int varItem2 = 0;
+    _test(arg2, constItem2, varItem2);
+}
+
+bool iterate_test(Expression& e1, Expression& e2, Expression& indexExpr, int from, int to, int step) {
+    for (int i = from; i < to; i += step) {
+        for (int j = from; j < to; j += step) {
+            Expression* replaced1 = replace_ssa_expression(e1.clone(), &indexExpr, constant(i));
+            Expression* replaced2 = replace_ssa_expression(e2.clone(), &indexExpr, constant(j));
+
+            Expression* simplified1 = simplify(replaced1);
+            Expression* simplified2 = simplify(replaced2);
+//            cout << *simplified1 << " --- " << *simplified2 << endl;
+
+            if (*simplified1 == *simplified2) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+void find_array_dd_between_stmts(DEPENDENCE_TYPE dType, Statement& s1, Statement& s2, Expression& indexExpr, int from, int to, int step) {
+    const RefSet<Expression>* e1Set = NULL;
+    const RefSet<Expression>* e2Set = NULL;
+
+    switch (dType) {
+    case FLOW:
+        e1Set = &s1.out_refs();
+        e2Set = &s2.in_refs();
+        break;
+    case OUTPUT:
+        e1Set = &s1.out_refs();
+        e2Set = &s2.out_refs();
+        break;
+    case ANTI:
+        e1Set = &s1.in_refs();
+        e2Set = &s2.out_refs();
+        break;
+    }
+
+    for (Iterator<Expression> e1Iter = *e1Set; e1Iter.valid(); ++e1Iter) {
         Expression& e1 = e1Iter.current();
 
         if (e1.op() != ARRAY_REF_OP) {
@@ -344,7 +424,7 @@ void find_array_dd_between_stmts(Statement& s1, Statement& s2) {
 
         Symbol* arrayBaseSym1 = e1.base_variable_ref();
 
-        for (Iterator<Expression> e2Iter = s2.in_refs(); e2Iter.valid(); ++e2Iter) {
+        for (Iterator<Expression> e2Iter = *e2Set; e2Iter.valid(); ++e2Iter) {
             Expression& e2 = e2Iter.current();
 
             if (e2.op() != ARRAY_REF_OP) {
@@ -357,7 +437,15 @@ void find_array_dd_between_stmts(Statement& s1, Statement& s2) {
                 continue;
             }
 
+            Expression& idx1 = e1.subscript();
+            Expression& idx2 = e2.subscript();
 
+//            gcd_test(idx1, idx2);
+
+            if (iterate_test(idx1, idx2, indexExpr, from, to, step)) {
+                cout << "Found matching for d-type " << dType << ": " << idx1 << " and " << idx2 << endl;
+                add_dependence(&s1, &s2);
+            }
         }
     }
 }
@@ -377,12 +465,14 @@ void find_array_dd(ProgramUnit& pgm) {
             for (Iterator<Statement> stmtIter2 = stmts.iterate_loop_body(&doStmt); stmtIter2.valid(); ++stmtIter2) {
                 Statement& stmt2 = stmtIter2.current();
 
-                if (stmts.index(stmt1) >= stmts.index(stmt2)) {
+                if (stmts.index(stmt1) > stmts.index(stmt2)) {
                     // stmt1 should come before stmt2
                     continue;
                 }
 
-                find_array_dd_between_stmts(stmt1, stmt2);
+                find_array_dd_between_stmts(FLOW, stmt1, stmt2, doStmt.index(), doStmt.init().value(), doStmt.limit().value(), doStmt.step().value());
+                find_array_dd_between_stmts(OUTPUT, stmt1, stmt2, doStmt.index(), doStmt.init().value(), doStmt.limit().value(), doStmt.step().value());
+//                find_array_dd_between_stmts(ANTI, stmt1, stmt2, doStmt.index(), doStmt.init().value(), doStmt.limit().value(), doStmt.step().value());
             }
 
 //            for (Iterator<Expression> inExprIter = stmt1.in_refs(); inExprIter.valid(); ++inExprIter) {

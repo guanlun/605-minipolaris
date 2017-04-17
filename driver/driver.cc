@@ -221,6 +221,7 @@ driver(int argc, char *argv[])
 
         if (switch_value("ddtest"))
         {
+            cout << "DOING DD TEST" << endl;
             ddtest(pgm);
 
             switch (switch_value("p_ddtest")) {

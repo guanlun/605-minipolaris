@@ -71,4 +71,5 @@ availexpr    0
 p_subexpr    0
 p_avail      0
 
+ddtest       1
 p_ddtest     1
