@@ -4,7 +4,7 @@
 
         do i=2,10,1
           a(i) = 10
-          j = a(2*i+1)
+          j = a(i + 1)
         enddo
         STOP
         END

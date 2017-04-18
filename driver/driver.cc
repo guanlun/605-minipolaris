@@ -221,8 +221,10 @@ driver(int argc, char *argv[])
 
         if (switch_value("ddtest"))
         {
-            cout << "DOING DD TEST" << endl;
             ddtest(pgm);
+
+            print_dds(switch_value("dds_flow"), switch_value("dds_output"), switch_value("dds_anti"));
+            print_dda(switch_value("dda_flow"), switch_value("dda_output"), switch_value("dda_anti"));
 
             switch (switch_value("p_ddtest")) {
                 case 1:

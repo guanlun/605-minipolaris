@@ -4,6 +4,7 @@
 #include <set>
 #include <vector>
 #include <map>
+#include <sstream>
 
 #include "ddtest.h"
 #include "StmtList.h"
@@ -20,16 +21,20 @@ enum DEPENDENCE_TYPE {
 };
 
 struct DataDependence {
+    DEPENDENCE_TYPE dType;
     Statement* dependedStmt;
     Statement* dependingStmt;
+    string note;
 
-    DataDependence(Statement* depended, Statement* depending) {
+    DataDependence(DEPENDENCE_TYPE type, Statement* depended, Statement* depending, string n = "") {
+        dType = type;
         dependedStmt = depended;
         dependingStmt = depending;
+        note = n;
     }
 
     void print(ostream& o) {
-        o << "Dependence: " << dependedStmt->tag() << ": " << dependingStmt->tag() << endl;
+        o << "    " << dependedStmt->tag() << " to " << dependingStmt->tag() << " (" << note << ")" << endl;
     }
 };
 
@@ -38,6 +43,7 @@ set<Expression*> uses;
 map<Expression*, Expression*> marked;
 map<Expression*, Statement*> markedReaching;
 map<Expression*, Expression*> fudChains;
+map<Expression*, Expression*> fddChains;
 map<Expression*, vector<Expression*>* > phiChains;
 map<Statement*, vector<Expression*>* > reaching;
 map<Statement*, bool> self;
@@ -47,10 +53,48 @@ map<Expression*, vector<Expression*>* > currUse;
 map<Expression*, vector<Expression*>* > chainUse;
 map<Expression*, vector<Expression*>* > saveChainUse;
 
-set<DataDependence*> dependencies;
+set<DataDependence*> scalarFlowDependencies;
+set<DataDependence*> scalarOutputDependencies;
+set<DataDependence*> scalarAntiDependencies;
 
-void add_dependence(Statement* depended, Statement* depending) {
-    dependencies.insert(new DataDependence(depended, depending));
+set<DataDependence*> arrayFlowDependencies;
+set<DataDependence*> arrayOutputDependencies;
+set<DataDependence*> arrayAntiDependencies;
+
+void add_scalar_dependence(DEPENDENCE_TYPE dType, Statement* depended, Statement* depending, string note = "") {
+    set<DataDependence*>* ddSet;
+
+    switch (dType) {
+    case FLOW:
+        ddSet = &scalarFlowDependencies;
+        break;
+    case OUTPUT:
+        ddSet = &scalarOutputDependencies;
+        break;
+    case ANTI:
+        ddSet = &scalarAntiDependencies;
+        break;
+    }
+
+    ddSet->insert(new DataDependence(dType, depended, depending, note));
+}
+
+void add_array_dependence(DEPENDENCE_TYPE dType, Statement* depended, Statement* depending, string note = "") {
+    set<DataDependence*>* ddSet;
+
+    switch (dType) {
+    case FLOW:
+        ddSet = &arrayFlowDependencies;
+        break;
+    case OUTPUT:
+        ddSet = &arrayOutputDependencies;
+        break;
+    case ANTI:
+        ddSet = &arrayAntiDependencies;
+        break;
+    }
+
+    ddSet->insert(new DataDependence(dType, depended, depending, note));
 }
 
 void preprocess(ProgramUnit& pgm) {
@@ -136,21 +180,21 @@ void build_fud_chains(ProgramUnit& pgm) {
     }
 
     // Print phi chains
-    cout << "phi chains:" << endl;
-
-    for (map<Expression*, vector<Expression*>* >::iterator it = phiChains.begin(); it != phiChains.end(); ++it) {
-        Expression* expr = it->first;
-        vector<Expression*>* chain = it->second;
-
-        cout << *expr << ": ";
-        for (vector<Expression*>::iterator itt = chain->begin(); itt != chain->end(); ++itt) {
-            Expression* def = *itt;
-
-            cout << *def << "(" << exprStmtLookup[def]->tag() << "), ";
-        }
-
-        cout << endl;
-    }
+//    cout << "phi chains:" << endl;
+//
+//    for (map<Expression*, vector<Expression*>* >::iterator it = phiChains.begin(); it != phiChains.end(); ++it) {
+//        Expression* expr = it->first;
+//        vector<Expression*>* chain = it->second;
+//
+//        cout << *expr << ": ";
+//        for (vector<Expression*>::iterator itt = chain->begin(); itt != chain->end(); ++itt) {
+//            Expression* def = *itt;
+//
+//            cout << *def << "(" << exprStmtLookup[def]->tag() << "), ";
+//        }
+//
+//        cout << endl;
+//    }
 }
 
 void upsilon_search(Statement* x) {
@@ -192,7 +236,7 @@ void build_frud_chains(ProgramUnit& pgm) {
 void find_reaching(Expression* def, Statement* lhp, int depth = 0) {
     tab(depth);
 
-    cout << "Finding reaching for def " << *def << " and loop-header-phi " << lhp->tag() << endl;
+//    cout << "Finding reaching for def " << *def << " and loop-header-phi " << lhp->tag() << endl;
 
     if (markedReaching[def] == lhp) {
         return;
@@ -260,10 +304,10 @@ void find_dependence(Expression* def, Expression* use, int depth = 0) {
 
             if (self[defStmt]) {
                 // TODO
-                add_dependence(reachingStmt, useStmt);
+                add_scalar_dependence(FLOW, reachingStmt, useStmt);
             } else {
                 // TODO
-                add_dependence(reachingStmt, useStmt);
+                add_scalar_dependence(FLOW, reachingStmt, useStmt);
             }
         }
 
@@ -279,25 +323,22 @@ void find_dependence(Expression* def, Expression* use, int depth = 0) {
         tab(depth);
         cout << "is nothing" << endl;
 
-        add_dependence(defStmt, exprStmtLookup[use]);
+        add_scalar_dependence(FLOW, defStmt, exprStmtLookup[use]);
     }
 }
 
 void find_scalar_dd(ProgramUnit& pgm) {
     for (set<Statement*>::iterator lhpIter = lhps.begin(); lhpIter != lhps.end(); ++lhpIter) {
         Statement* lhpStmt = *lhpIter;
-//        cout << "Loop header phi: " << lhpStmt->tag() << endl;
 
         reaching[lhpStmt] = new vector<Expression*>;
         self[lhpStmt] = false;
     }
 
-    cout << "Uses: ";
     for (set<Expression*>::iterator useExprIter = uses.begin(); useExprIter != uses.end(); ++useExprIter) {
         Expression* useExpr = *useExprIter;
-        cout << *useExpr << "(" << exprStmtLookup[useExpr]->tag() << "), ";
+//        cout << *useExpr << "(" << exprStmtLookup[useExpr]->tag() << "), ";
     }
-    cout << endl;
 
     for (set<Expression*>::iterator useExprIter = uses.begin(); useExprIter != uses.end(); ++useExprIter) {
         Expression* useExpr = *useExprIter;
@@ -309,32 +350,32 @@ void find_scalar_dd(ProgramUnit& pgm) {
         }
     }
 
-    cout << "Data dependencies: " << endl;
-    for (set<DataDependence*>::iterator it = dependencies.begin(); it != dependencies.end(); ++it) {
-        DataDependence* dd = *it;
-
-        dd->print(cout);
-    }
-
-    cout << "Self: " << endl;
-    for (map<Statement*, bool>::iterator it = self.begin(); it != self.end(); ++it) {
-        cout << it->first->tag() << ": " << boolalpha << it->second << endl;
-    }
-
-    cout << "Reaching: " << endl;
-    for (map<Statement*, vector<Expression*>* >::iterator it = reaching.begin(); it != reaching.end(); ++it) {
-        cout << it->first->tag() << ": ";
-
-        vector<Expression*>* reachingDefs = it->second;
-
-        for (vector<Expression*>::iterator itt = reachingDefs->begin(); itt != reachingDefs->end(); ++itt) {
-            cout << **itt << endl;
-        }
-        cout << endl;
-    }
+//    cout << "Data dependencies: " << endl;
+//    for (set<DataDependence*>::iterator it = dependencies.begin(); it != dependencies.end(); ++it) {
+//        DataDependence* dd = *it;
+//
+//        dd->print(cout);
+//    }
+//
+//    cout << "Self: " << endl;
+//    for (map<Statement*, bool>::iterator it = self.begin(); it != self.end(); ++it) {
+//        cout << it->first->tag() << ": " << boolalpha << it->second << endl;
+//    }
+//
+//    cout << "Reaching: " << endl;
+//    for (map<Statement*, vector<Expression*>* >::iterator it = reaching.begin(); it != reaching.end(); ++it) {
+//        cout << it->first->tag() << ": ";
+//
+//        vector<Expression*>* reachingDefs = it->second;
+//
+//        for (vector<Expression*>::iterator itt = reachingDefs->begin(); itt != reachingDefs->end(); ++itt) {
+//            cout << **itt << endl;
+//        }
+//        cout << endl;
+//    }
 }
 
-void _test(Expression& expr, int& constItem, int& varItem, int coeff = 1) {
+void gcd_test_helper(Expression& expr, int& constItem, int& varItem, int coeff = 1) {
     switch (expr.op()) {
     case ID_OP:
         varItem = coeff;
@@ -343,41 +384,48 @@ void _test(Expression& expr, int& constItem, int& varItem, int coeff = 1) {
         constItem = coeff;
         break;
     case ADD_OP:
-        _test(expr.arg_list()[0], constItem, varItem, coeff);
-        _test(expr.arg_list()[1], constItem, varItem, coeff);
+        gcd_test_helper(expr.arg_list()[0], constItem, varItem, coeff);
+        gcd_test_helper(expr.arg_list()[1], constItem, varItem, coeff);
         break;
     case SUB_OP:
-        _test(expr.arg_list()[0], constItem, varItem, coeff);
-        _test(expr.arg_list()[1], constItem, varItem, -coeff);
+        gcd_test_helper(expr.arg_list()[0], constItem, varItem, coeff);
+        gcd_test_helper(expr.arg_list()[1], constItem, varItem, -coeff);
         break;
     case MULT_OP:
         Expression& sub1 = expr.arg_list()[0];
         Expression& sub2 = expr.arg_list()[1];
 
         if (sub1.op() == INTEGER_CONSTANT_OP) {
-            _test(sub2, constItem, varItem, coeff * sub1.value());
+            gcd_test_helper(sub2, constItem, varItem, coeff * sub1.value());
         } else {
-            _test(sub1, constItem, varItem, coeff * sub2.value());
+            gcd_test_helper(sub1, constItem, varItem, coeff * sub2.value());
         }
     }
 }
 
-void gcd_test(Expression& e1, Expression& e2) {
-    cout << "-------------------GCD test---------------------" << endl;
+bool gcd_test(Expression& e1, Expression& e2) {
+//    cout << "-------------------GCD test---------------------" << endl;
 
     Expression& arg1 = e1.arg_list()[0];
     Expression& arg2 = e2.arg_list()[0];
 
     int constItem1 = 0;
     int varItem1 = 0;
-    _test(arg1, constItem1, varItem1);
+    gcd_test_helper(arg1, constItem1, varItem1);
 
     int constItem2 = 0;
     int varItem2 = 0;
-    _test(arg2, constItem2, varItem2);
+    gcd_test_helper(arg2, constItem2, varItem2);
+
+    int constItem = constItem1 - constItem2;
+    int gcd = find_gcd(varItem1, varItem2);
+
+//    cout << "Computed gcd: " << varItem1 << " " << varItem2 << " " << gcd << endl;
+
+    return (constItem % gcd == 0);
 }
 
-bool iterate_test(Expression& e1, Expression& e2, Expression& indexExpr, int from, int to, int step) {
+bool iterate_test(Expression& e1, Expression& e2, Expression& indexExpr, int from, int to, int step, bool& hasFlow, bool& hasAnti) {
     for (int i = from; i < to; i += step) {
         for (int j = from; j < to; j += step) {
             Expression* replaced1 = replace_ssa_expression(e1.clone(), &indexExpr, constant(i));
@@ -385,10 +433,17 @@ bool iterate_test(Expression& e1, Expression& e2, Expression& indexExpr, int fro
 
             Expression* simplified1 = simplify(replaced1);
             Expression* simplified2 = simplify(replaced2);
-//            cout << *simplified1 << " --- " << *simplified2 << endl;
+
+//            cout << *simplified1 << " " << *simplified2 << endl;
 
             if (*simplified1 == *simplified2) {
-                return true;
+                if (i < j) {
+                    hasFlow = true;
+                    return true;
+                } else if (i > j) {
+                    hasAnti = true;
+                    return true;
+                }
             }
         }
     }
@@ -400,19 +455,12 @@ void find_array_dd_between_stmts(DEPENDENCE_TYPE dType, Statement& s1, Statement
     const RefSet<Expression>* e1Set = NULL;
     const RefSet<Expression>* e2Set = NULL;
 
-    switch (dType) {
-    case FLOW:
+    if (dType == OUTPUT) {
+        e1Set = &s1.out_refs();
+        e2Set = &s2.out_refs();
+    } else {
         e1Set = &s1.out_refs();
         e2Set = &s2.in_refs();
-        break;
-    case OUTPUT:
-        e1Set = &s1.out_refs();
-        e2Set = &s2.out_refs();
-        break;
-    case ANTI:
-        e1Set = &s1.in_refs();
-        e2Set = &s2.out_refs();
-        break;
     }
 
     for (Iterator<Expression> e1Iter = *e1Set; e1Iter.valid(); ++e1Iter) {
@@ -440,11 +488,28 @@ void find_array_dd_between_stmts(DEPENDENCE_TYPE dType, Statement& s1, Statement
             Expression& idx1 = e1.subscript();
             Expression& idx2 = e2.subscript();
 
-//            gcd_test(idx1, idx2);
+            gcd_test(idx1, idx2);
 
-            if (iterate_test(idx1, idx2, indexExpr, from, to, step)) {
-                cout << "Found matching for d-type " << dType << ": " << idx1 << " and " << idx2 << endl;
-                add_dependence(&s1, &s2);
+            bool hasFlowDependence = false, hasAntiDependence = false;
+            if (iterate_test(idx1, idx2, indexExpr, from, to, step, hasFlowDependence, hasAntiDependence)) {
+//                cout << "Found matching for d-type " << dType << ": " << idx1 << " and " << idx2 << endl;
+
+                stringstream ss;
+                e1.print(ss);
+                ss << " and ";
+                e2.print(ss);
+
+                if (dType == OUTPUT) {
+                    add_array_dependence(OUTPUT, &s1, &s2, ss.str());
+                } else {
+                    if (hasFlowDependence) {
+                        add_array_dependence(FLOW, &s1, &s2, ss.str());
+                    }
+
+                    if (hasAntiDependence) {
+                        add_array_dependence(ANTI, &s1, &s2, ss.str());
+                    }
+                }
             }
         }
     }
@@ -464,44 +529,42 @@ void find_array_dd(ProgramUnit& pgm) {
 
             for (Iterator<Statement> stmtIter2 = stmts.iterate_loop_body(&doStmt); stmtIter2.valid(); ++stmtIter2) {
                 Statement& stmt2 = stmtIter2.current();
-
-                if (stmts.index(stmt1) > stmts.index(stmt2)) {
-                    // stmt1 should come before stmt2
-                    continue;
-                }
-
                 find_array_dd_between_stmts(FLOW, stmt1, stmt2, doStmt.index(), doStmt.init().value(), doStmt.limit().value(), doStmt.step().value());
-                find_array_dd_between_stmts(OUTPUT, stmt1, stmt2, doStmt.index(), doStmt.init().value(), doStmt.limit().value(), doStmt.step().value());
-//                find_array_dd_between_stmts(ANTI, stmt1, stmt2, doStmt.index(), doStmt.init().value(), doStmt.limit().value(), doStmt.step().value());
+
+                if (stmts.index(stmt1) <= stmts.index(stmt2)) {
+                    find_array_dd_between_stmts(OUTPUT, stmt1, stmt2, doStmt.index(), doStmt.init().value(), doStmt.limit().value(), doStmt.step().value());
+                }
             }
-
-//            for (Iterator<Expression> inExprIter = stmt1.in_refs(); inExprIter.valid(); ++inExprIter) {
-//                Expression& inExpr = inExprIter.current();
-//
-//                if (inExpr.op() == ARRAY_REF_OP) {
-//                    Symbol* arrayBaseSym = inExpr.base_variable_ref();
-//
-//                    readLookup[arrayBaseSym] = &stmt1;
-//                }
-//            }
-//
-//            for (Iterator<Expression> outExprIter = stmt1.out_refs(); outExprIter.valid(); ++outExprIter) {
-//                Expression& outExpr = outExprIter.current();
-//
-//                if (outExpr.op() == ARRAY_REF_OP) {
-//                    Symbol* arrayBaseSym = outExpr.base_variable_ref();
-//
-//                    writeLookup[arrayBaseSym] = &stmt1;
-//                }
-//            }
         }
+    }
+}
 
-//        for (map<Symbol*, Statement*>::iterator readIter = readLookup.begin(); readIter != readLookup.end(); ++readIter) {
-//            Symbol* readSymbol = readIter->first;
-//            Statement* readStmt = readIter->second;
-//
-//            cout << "read: " << *readSymbol << ": " << readStmt->tag() << endl;
-//        }
+void print_dds(bool flow, bool output, bool anti) {
+
+}
+
+void print_dda(bool flow, bool output, bool anti) {
+    cout << "contains the following dependencies:" << endl;
+
+    cout << "  Flow : " << endl;
+    for (set<DataDependence*>::iterator ddIter = arrayFlowDependencies.begin(); ddIter != arrayFlowDependencies.end(); ++ddIter) {
+        DataDependence* dd = *ddIter;
+
+        dd->print(cout);
+    }
+
+    cout << "  Output : " << endl;
+    for (set<DataDependence*>::iterator ddIter = arrayOutputDependencies.begin(); ddIter != arrayOutputDependencies.end(); ++ddIter) {
+        DataDependence* dd = *ddIter;
+
+        dd->print(cout);
+    }
+
+    cout << "  Anti : " << endl;
+    for (set<DataDependence*>::iterator ddIter = arrayAntiDependencies.begin(); ddIter != arrayAntiDependencies.end(); ++ddIter) {
+        DataDependence* dd = *ddIter;
+
+        dd->print(cout);
     }
 }
 
@@ -519,8 +582,6 @@ void ddtest(ProgramUnit & pgm)
 
     cout << "For arrays: ------------------------------------------" << endl;
     find_array_dd(pgm);
-
-
 
     cout << "------------------------------------------------------" << endl;
     build_frud_chains(pgm);

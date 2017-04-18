@@ -46,6 +46,14 @@ char* orig_symbol_name(Symbol& symbol) {
     return origName;
 }
 
+int find_gcd(int a, int b) {
+    if ((a == 0) || (b == 0)) {
+        return a + b;
+    }
+
+    return find_gcd(b, a % b);
+}
+
 Expression* replace_ssa_expression(Expression* expr, Expression* oldExpr, Expression* newExpr) {
 //    cout << "replacing " << *oldExpr << " with " << *newExpr << " in " << *expr << endl;
     if (*expr == *oldExpr) {
