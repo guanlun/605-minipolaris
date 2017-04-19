@@ -1,3 +1,5 @@
+#include <string>
+
 bool is_stmt_with_named_func(Statement& stmt, const char* name) {
     if (stmt.stmt_class() != ASSIGNMENT_STMT) {
         return false;
@@ -74,4 +76,20 @@ Expression* replace_ssa_expression(Expression* expr, Expression* oldExpr, Expres
     }
 
     return expr;
+}
+
+string get_stmt_loop_name(Statement* stmt) {
+    string loopName = "";
+
+    Statement *runner = stmt;
+
+    while (runner->stmt_class() != DO_STMT) {
+        runner = runner->prev_ref();
+    }
+
+    if (runner != NULL) {
+        loopName = runner->get_loop_name();
+    }
+
+    return loopName;
 }
