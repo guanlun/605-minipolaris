@@ -43,11 +43,13 @@ set<Expression*> uses;
 map<Expression*, Expression*> marked;
 map<Expression*, Statement*> markedReaching;
 map<Expression*, Expression*> fudChains;
-map<Expression*, Expression*> fddChains;
 map<Expression*, vector<Expression*>* > phiChains;
 map<Statement*, vector<Expression*>* > reaching;
 map<Statement*, bool> self;
 map<Expression*, Statement*> exprStmtLookup;
+
+set<Statement*> ddVisited;
+map<Expression*, Expression*> fddChains;
 
 map<Expression*, vector<Expression*>* > currUse;
 map<Expression*, vector<Expression*>* > chainUse;
@@ -135,6 +137,137 @@ void find_LHPs(ProgramUnit& pgm) {
     }
 }
 
+void fdd_helper(Symbol& sym, Statement& stmt, vector<Expression*>& prevDefs) {
+    if (ddVisited.find(&stmt) != ddVisited.end()) {
+        return;
+    }
+
+    ddVisited.insert(&stmt);
+    Expression* defExpr = get_def_expr(stmt);
+
+    bool added = false;
+
+    if ((defExpr != NULL) && (defExpr->op() == ID_OP)) {
+        Symbol& exprSym = defExpr->symbol();
+
+        if (strcmp(orig_symbol_name(exprSym), orig_symbol_name(sym)) == 0) {
+            if (!prevDefs.empty()) {
+                Expression* reachingDefExpr = prevDefs.back();
+
+                cout << "At " << stmt.tag() << " we have reaching expr " << *reachingDefExpr << endl;
+            }
+
+            prevDefs.push_back(defExpr);
+
+            added = true;
+        }
+    }
+
+    for (Iterator<Statement> succIter = stmt.succ(); succIter.valid(); ++succIter) {
+        Statement& succ = succIter.current();
+
+        fdd_helper(sym, succ, prevDefs);
+    }
+
+    if (added) {
+        prevDefs.pop_back();
+    }
+}
+
+void find_scalar_anti_dd_between_stmts(Statement& s1, Statement& s2) {
+    Expression* def = get_def_expr(s2);
+
+    if ((def == NULL) || (def->op() != ID_OP)) {
+        return;
+    }
+
+    set<string> addedUseNames;
+
+    for (Iterator<Expression> useIter = s1.in_refs(); useIter.valid(); ++useIter) {
+        Expression& use = useIter.current();
+
+        if (use.op() != ID_OP) {
+            continue;
+        }
+
+        char* origUseName = orig_symbol_name(use.symbol());
+        char* origDefName = orig_symbol_name(def->symbol());
+
+        string origStr(origUseName);
+
+        if (addedUseNames.find(origStr) != addedUseNames.end()) {
+            // Already exists
+            continue;
+        }
+
+        addedUseNames.insert(origStr);
+
+        if (strcmp(origUseName, origDefName) == 0) {
+            add_scalar_dependence(ANTI, &s1, &s2, "0");
+        }
+    }
+}
+
+void find_scalar_output_dd_between_stmts(Statement& s1, Statement& s2) {
+    Expression* def1 = get_def_expr(s1);
+    Expression* def2 = get_def_expr(s2);
+
+    if ((def1 == NULL) || (def2 == NULL) || (def1->op() != ID_OP) || (def2->op() != ID_OP)) {
+        return;
+    }
+
+    const char* orig1 = orig_symbol_name(def1->symbol());
+    const char* orig2 = orig_symbol_name(def2->symbol());
+
+    if (strcmp(orig1, orig2) == 0) {
+        add_scalar_dependence(OUTPUT, &s1, &s2, "0");
+    }
+}
+
+void find_scalar_anti_and_output_dd(ProgramUnit& pgm) {
+    StmtList& stmts = pgm.stmts();
+
+    for (Iterator<Statement> doStmtIter = stmts.stmts_of_type(DO_STMT); doStmtIter.valid(); ++doStmtIter) {
+        Statement& doStmt = doStmtIter.current();
+
+        map<Symbol*, Statement*> readLookup;
+        map<Symbol*, Statement*> writeLookup;
+
+        for (Iterator<Statement> stmtIter1 = stmts.iterate_loop_body(&doStmt); stmtIter1.valid(); ++stmtIter1) {
+            Statement& stmt1 = stmtIter1.current();
+
+            for (Iterator<Statement> stmtIter2 = stmts.iterate_loop_body(&doStmt); stmtIter2.valid(); ++stmtIter2) {
+                Statement& stmt2 = stmtIter2.current();
+
+                if (stmts.index(stmt1) < stmts.index(stmt2)) {
+                    find_scalar_output_dd_between_stmts(stmt1, stmt2);
+                    find_scalar_anti_dd_between_stmts(stmt1, stmt2);
+                }
+            }
+        }
+    }
+}
+
+void build_fdd_chains(ProgramUnit& pgm) {
+    for (DictionaryIter<Symbol> symIter = pgm.symtab().iterator(); symIter.valid(); ++symIter) {
+        Symbol& symbol = symIter.current();
+
+        if (symbol.sym_class() != VARIABLE_CLASS) {
+            continue;
+        }
+
+        StmtList& stmts = pgm.stmts();
+
+        Statement& entry = stmts[0];
+
+        ddVisited.clear();
+
+        vector<Expression*> prevDefs;
+
+        fdd_helper(symbol, entry, prevDefs);
+    }
+}
+
 void build_fud_chains(ProgramUnit& pgm) {
     StmtList& stmts = pgm.stmts();
 
@@ -169,6 +302,8 @@ void build_fud_chains(ProgramUnit& pgm) {
                             phiChains[&phiTargetExpr] = phiChain;
                         }
 
+                        cout << "pushing back " << *defExpr << endl;
+
                         phiChain->push_back(defExpr);
 
                     } else {
@@ -178,66 +313,9 @@ void build_fud_chains(ProgramUnit& pgm) {
             }
         }
     }
-
-    // Print phi chains
-//    cout << "phi chains:" << endl;
-//
-//    for (map<Expression*, vector<Expression*>* >::iterator it = phiChains.begin(); it != phiChains.end(); ++it) {
-//        Expression* expr = it->first;
-//        vector<Expression*>* chain = it->second;
-//
-//        cout << *expr << ": ";
-//        for (vector<Expression*>::iterator itt = chain->begin(); itt != chain->end(); ++itt) {
-//            Expression* def = *itt;
-//
-//            cout << *def << "(" << exprStmtLookup[def]->tag() << "), ";
-//        }
-//
-//        cout << endl;
-//    }
-}
-
-void upsilon_search(Statement* x) {
-    cout << "Search stmt: " << x->tag() << endl;
-
-    if (is_phi_stmt(*x)) {
-        Expression* m = &x->lhs();
-        vector<Expression*> currUseM = *currUse[m];
-//        saveChainUse[m] = currUseM;
-
-
-    } else {
-
-    }
-}
-
-void build_frud_chains(ProgramUnit& pgm) {
-    StmtList& stmts = pgm.stmts();
-
-    for (Iterator<Statement> stmtIter = stmts; stmtIter.valid(); ++stmtIter) {
-        Statement& stmt = stmtIter.current();
-
-        for (Iterator<Expression> inIter = stmt.in_refs(); inIter.valid(); ++inIter) {
-            Expression& inExpr = inIter.current();
-
-            currUse[&inExpr] = new vector<Expression*>;
-        }
-
-        for (Iterator<Expression> outIter = stmt.out_refs(); outIter.valid(); ++outIter) {
-            Expression& outExpr = outIter.current();
-
-            currUse[&outExpr] = new vector<Expression*>;
-        }
-    }
-
-    upsilon_search(&stmts[0]);
 }
 
 void find_reaching(Expression* def, Statement* lhp, int depth = 0) {
-    tab(depth);
-
-//    cout << "Finding reaching for def " << *def << " and loop-header-phi " << lhp->tag() << endl;
-
     if (markedReaching[def] == lhp) {
         return;
     }
@@ -246,6 +324,8 @@ void find_reaching(Expression* def, Statement* lhp, int depth = 0) {
 
     Statement* defStmt = exprStmtLookup[def];
 
+    cout << defStmt << endl;
+    cout << *defStmt << endl;
     if (defStmt == lhp) {
         self[lhp] = true;
     } else if (is_phi_stmt(*defStmt)) {
@@ -255,31 +335,27 @@ void find_reaching(Expression* def, Statement* lhp, int depth = 0) {
     } else {
         vector<Expression*>* reachingDefs = reaching[lhp];
         reachingDefs->push_back(def);
-
-        // TODO: non-killing
     }
 }
 
 void find_dependence(Expression* def, Expression* use, int depth = 0) {
-    tab(depth);
-
-    cout << "Finding dependence for def " << *def << " and use " << *use << endl;
+//    tab(depth);
+//
+//    cout << "Finding dependence for def " << *def << " and use " << *use << endl;
 
     if (marked[def] == use) {
-        tab(depth);
-        cout << "marked!!!" << endl;
         return;
     }
 
     marked[def] = use;
 
     Statement* defStmt = exprStmtLookup[def];
-    tab(depth);
-    cout << "def stmt: " << defStmt->tag() << endl;
+//    tab(depth);
+//    cout << "def stmt: " << defStmt->tag() << endl;
 
     if (lhps.find(defStmt) != lhps.end()) {
-        tab(depth);
-        cout << "is loop header phi" << endl;
+//        tab(depth);
+//        cout << "is loop header phi" << endl;
 
         vector<Expression*> phiChain = *phiChains[def];
 
@@ -292,6 +368,9 @@ void find_dependence(Expression* def, Expression* use, int depth = 0) {
 
         vector<Expression*>* reachingDefs = reaching[defStmt];
 
+        cout << *defStmt << " " << phiChain.size() << endl;
+        cout << *phiChainLoopOutRef << endl;
+
         if (reachingDefs->empty()) {
             find_reaching(phiChainLookInRef, defStmt, depth + 1);
         }
@@ -303,31 +382,22 @@ void find_dependence(Expression* def, Expression* use, int depth = 0) {
             Statement* useStmt = exprStmtLookup[use];
 
             if (self[defStmt]) {
-                // TODO
-                add_scalar_dependence(FLOW, reachingStmt, useStmt);
+                add_scalar_dependence(FLOW, reachingStmt, useStmt, "<");
             } else {
-                // TODO
-                add_scalar_dependence(FLOW, reachingStmt, useStmt);
+                add_scalar_dependence(FLOW, reachingStmt, useStmt, "1");
             }
         }
 
     } else if (is_phi_stmt(*defStmt)) {
-        tab(depth);
-        cout << "is normal phi" << endl;
-
-        // TODO
         vector<Expression*> phiChain = *phiChains[def];
         find_dependence(phiChain[0], use, depth + 1);
         find_dependence(phiChain[1], use, depth + 1);
     } else {
-        tab(depth);
-        cout << "is nothing" << endl;
-
-        add_scalar_dependence(FLOW, defStmt, exprStmtLookup[use]);
+        add_scalar_dependence(FLOW, defStmt, exprStmtLookup[use], "0");
     }
 }
 
-void find_scalar_dd(ProgramUnit& pgm) {
+void find_scalar_flow_dd(ProgramUnit& pgm) {
     for (set<Statement*>::iterator lhpIter = lhps.begin(); lhpIter != lhps.end(); ++lhpIter) {
         Statement* lhpStmt = *lhpIter;
 
@@ -337,7 +407,6 @@ void find_scalar_dd(ProgramUnit& pgm) {
 
     for (set<Expression*>::iterator useExprIter = uses.begin(); useExprIter != uses.end(); ++useExprIter) {
         Expression* useExpr = *useExprIter;
-//        cout << *useExpr << "(" << exprStmtLookup[useExpr]->tag() << "), ";
     }
 
     for (set<Expression*>::iterator useExprIter = uses.begin(); useExprIter != uses.end(); ++useExprIter) {
@@ -404,8 +473,6 @@ void gcd_test_helper(Expression& expr, int& constItem, int& varItem, int coeff =
 }
 
 bool gcd_test(Expression& e1, Expression& e2) {
-//    cout << "-------------------GCD test---------------------" << endl;
-
     Expression& arg1 = e1.arg_list()[0];
     Expression& arg2 = e2.arg_list()[0];
 
@@ -420,8 +487,6 @@ bool gcd_test(Expression& e1, Expression& e2) {
     int constItem = constItem1 - constItem2;
     int gcd = find_gcd(varItem1, varItem2);
 
-//    cout << "Computed gcd: " << varItem1 << " " << varItem2 << " " << gcd << endl;
-
     return (constItem % gcd == 0);
 }
 
@@ -433,8 +498,6 @@ bool iterate_test(Expression& e1, Expression& e2, Expression& indexExpr, int fro
 
             Expression* simplified1 = simplify(replaced1);
             Expression* simplified2 = simplify(replaced2);
-
-//            cout << *simplified1 << " " << *simplified2 << endl;
 
             if (*simplified1 == *simplified2) {
                 if (i < j) {
@@ -531,7 +594,7 @@ void find_array_dd(ProgramUnit& pgm) {
                 Statement& stmt2 = stmtIter2.current();
                 find_array_dd_between_stmts(FLOW, stmt1, stmt2, doStmt.index(), doStmt.init().value(), doStmt.limit().value(), doStmt.step().value());
 
-                if (stmts.index(stmt1) <= stmts.index(stmt2)) {
+                if (stmts.index(stmt1) < stmts.index(stmt2)) {
                     find_array_dd_between_stmts(OUTPUT, stmt1, stmt2, doStmt.index(), doStmt.init().value(), doStmt.limit().value(), doStmt.step().value());
                 }
             }
@@ -539,32 +602,40 @@ void find_array_dd(ProgramUnit& pgm) {
     }
 }
 
-void print_dds(bool flow, bool output, bool anti) {
+void print_dd(bool forArray, bool flow, bool output, bool anti) {
+    cout << "LOOP looplabel contains the following dependencies : " << endl;
 
-}
+    if (flow) {
+        set<DataDependence*>* ddSet = forArray ? &arrayFlowDependencies : &scalarFlowDependencies;
 
-void print_dda(bool flow, bool output, bool anti) {
-    cout << "contains the following dependencies:" << endl;
+        cout << "  Flow : " << endl;
+        for (set<DataDependence*>::iterator ddIter = ddSet->begin(); ddIter != ddSet->end(); ++ddIter) {
+            DataDependence* dd = *ddIter;
 
-    cout << "  Flow : " << endl;
-    for (set<DataDependence*>::iterator ddIter = arrayFlowDependencies.begin(); ddIter != arrayFlowDependencies.end(); ++ddIter) {
-        DataDependence* dd = *ddIter;
-
-        dd->print(cout);
+            dd->print(cout);
+        }
     }
 
-    cout << "  Output : " << endl;
-    for (set<DataDependence*>::iterator ddIter = arrayOutputDependencies.begin(); ddIter != arrayOutputDependencies.end(); ++ddIter) {
-        DataDependence* dd = *ddIter;
+    if (output) {
+        set<DataDependence*>* ddSet = forArray ? &arrayOutputDependencies : &scalarOutputDependencies;
 
-        dd->print(cout);
+        cout << "  Output : " << endl;
+        for (set<DataDependence*>::iterator ddIter = ddSet->begin(); ddIter != ddSet->end(); ++ddIter) {
+            DataDependence* dd = *ddIter;
+
+            dd->print(cout);
+        }
     }
 
-    cout << "  Anti : " << endl;
-    for (set<DataDependence*>::iterator ddIter = arrayAntiDependencies.begin(); ddIter != arrayAntiDependencies.end(); ++ddIter) {
-        DataDependence* dd = *ddIter;
+    if (anti) {
+        set<DataDependence*>* ddSet = forArray ? &arrayAntiDependencies : &scalarAntiDependencies;
 
-        dd->print(cout);
+        cout << "  Anti : " << endl;
+        for (set<DataDependence*>::iterator ddIter = ddSet->begin(); ddIter != ddSet->end(); ++ddIter) {
+            DataDependence* dd = *ddIter;
+
+            dd->print(cout);
+        }
     }
 }
 
@@ -578,11 +649,9 @@ void ddtest(ProgramUnit & pgm)
 
     build_fud_chains(pgm);
 
-    find_scalar_dd(pgm);
+    find_scalar_anti_and_output_dd(pgm);
 
-    cout << "For arrays: ------------------------------------------" << endl;
+    build_fdd_chains(pgm);
+
     find_array_dd(pgm);
-
-    cout << "------------------------------------------------------" << endl;
-    build_frud_chains(pgm);
 }

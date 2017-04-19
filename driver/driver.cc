@@ -223,8 +223,8 @@ driver(int argc, char *argv[])
         {
             ddtest(pgm);
 
-            print_dds(switch_value("dds_flow"), switch_value("dds_output"), switch_value("dds_anti"));
-            print_dda(switch_value("dda_flow"), switch_value("dda_output"), switch_value("dda_anti"));
+            print_dd(false, switch_value("dds_flow"), switch_value("dds_output"), switch_value("dds_anti"));
+            print_dd(true, switch_value("dda_flow"), switch_value("dda_output"), switch_value("dda_anti"));
 
             switch (switch_value("p_ddtest")) {
                 case 1:
