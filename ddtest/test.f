@@ -1,11 +1,10 @@
-        PROGRAM TEST5
-        INTEGER*4 a,i,j
+        PROGRAM TEST4
+        INTEGER*4 a,i,j,t
+        dimension a(10)
 
-        do t=1, 10
-          print a
-          a = 6
+        do i=1,10,1
+          t = a
+          b = t
         enddo
-          
         STOP
         END
-

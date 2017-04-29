@@ -282,7 +282,7 @@ void generate_phi_stmts(ProgramUnit& pgm, List<BasicBlock>* basicBlocks) {
     StmtList& stmts = pgm.stmts();
 
     for (DictionaryIter<Symbol> symIter = pgm.symtab().iterator(); symIter.valid(); ++symIter) {
-        Symbol& sym = symIter.current();
+        Symbol& sym = symIter.current();cout << sym << endl;
         set<BasicBlock*> workList;
         set<BasicBlock*> added;
 

@@ -23,7 +23,7 @@ nolinelenwarn 0 =1: turn off warnings of lines beyond col 72
 
 # Project 1a
 
-convert_gotos 0	Convert arithmetic ifs and computed gotos to simple gotos
+convert_gotos 1	Convert arithmetic ifs and computed gotos to simple gotos
 p_congoto     2	print after convert gotos pass (1 == Fortran form, 2 == all fields)
 
 # Project 1b
@@ -42,8 +42,8 @@ p_dessa      1  print after deSSA pass (0=dont, 1=FORTRAN,2=detailed)
 
 # Project 3
 
-constprop          0  performs constant propagation, live variable analysis, deadcode elimination (0=dont,1=do)
-p_constprop        0  print after constant propagation pass (0=dont, 1=do)
+constprop          1  performs constant propagation, live variable analysis, deadcode elimination (0=dont,1=do)
+p_constprop        1  print after constant propagation pass (0=dont, 1=do)
 
 
 
@@ -66,10 +66,10 @@ p_subst_fld  0  print the substituted field for IDExprs (debug)
 p_scan       2  print after scanner (1 == Fortran form, 2 == all fields)
 print        1  print program at the end (1 == Fortran form, 2 == all fields)
 
-subexpr      0
-availexpr    0
-p_subexpr    0
-p_avail      0
+subexpr      1
+availexpr    1
+p_subexpr    1
+p_avail      1
 
 ddtest       1
 p_ddtest     1

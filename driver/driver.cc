@@ -122,6 +122,26 @@ driver(int argc, char *argv[])
         }
 
         ///////////////////////////////////////
+        // run the constprop pass            //
+        ///////////////////////////////////////
+
+        if (switch_value("constprop"))
+        {
+
+            propagate_constants(pgm);
+
+            switch (switch_value("p_constprop")) {
+                case 1:
+                    cout << "AFTER CONSTANT PROPAGATION\n";
+                    pgm.write(cout);
+                    break;
+                case 2:
+                    cout << "AFTER CONSTANT PROPAGATION\n";
+                    pgm.print(cout);
+            }
+        }
+
+        ///////////////////////////////////////
         //  run the bblock pass              //
         ///////////////////////////////////////
 
@@ -147,28 +167,7 @@ driver(int argc, char *argv[])
             }
         }
 
-
-        ///////////////////////////////////////
-        // run the constprop pass            //
-        ///////////////////////////////////////
-
-        if (switch_value("constprop"))
-        {
-
-            propagate_constants(pgm);
-
-            switch (switch_value("p_constprop")) {
-                case 1:
-                    cout << "AFTER CONSTANT PROPAGATION\n";
-                    pgm.write(cout);
-                    break;
-                case 2:
-                    cout << "AFTER CONSTANT PROPAGATION\n";
-                    pgm.print(cout);
-            }
-        }
-
-        ///////////////////////////////////////
+       ///////////////////////////////////////
         //  run the ssa pass                 //
         ///////////////////////////////////////
 
