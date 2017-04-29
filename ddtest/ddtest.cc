@@ -328,10 +328,6 @@ void find_reaching(Expression* def, Statement* lhp, int depth = 0) {
 }
 
 void find_dependence(Expression* def, Expression* use, int depth = 0) {
-	//    tab(depth);
-	//
-	//    cout << "Finding dependence for def " << *def << " and use " << *use << endl;
-
 	if (marked[def] == use) {
 		return;
 	}
@@ -339,13 +335,8 @@ void find_dependence(Expression* def, Expression* use, int depth = 0) {
 	marked[def] = use;
 
 	Statement* defStmt = exprStmtLookup[def];
-	//    tab(depth);
-	//    cout << "def stmt: " << defStmt->tag() << endl;
 
 	if (lhps.find(defStmt) != lhps.end()) {
-		//        tab(depth);
-		//        cout << "is loop header phi" << endl;
-
 		vector<Expression*> phiChain = *phiChains[def];
 
 		// The first element refers to the reference from outside the loop body and the second one refers the
@@ -371,8 +362,7 @@ void find_dependence(Expression* def, Expression* use, int depth = 0) {
 
 			if (self[defStmt]) {
 				add_scalar_dependence(get_stmt_loop_name(useStmt), FLOW, reachingStmt, useStmt, "<");
-			}
-			else {
+			} else {
 				add_scalar_dependence(get_stmt_loop_name(useStmt), FLOW, reachingStmt, useStmt, "1");
 			}
 		}
@@ -403,37 +393,12 @@ void find_scalar_flow_dd(ProgramUnit& pgm) {
 
 	for (set<Expression*>::iterator useExprIter = uses.begin(); useExprIter != uses.end(); ++useExprIter) {
 		Expression* useExpr = *useExprIter;
-
 		Expression* defExpr = fudChains[useExpr];
 
 		if (defExpr != NULL) {
 			find_dependence(defExpr, useExpr);
 		}
 	}
-
-	//    cout << "Data dependencies: " << endl;
-	//    for (set<DataDependence*>::iterator it = dependencies.begin(); it != dependencies.end(); ++it) {
-	//        DataDependence* dd = *it;
-	//
-	//        dd->print(cout);
-	//    }
-	//
-	//    cout << "Self: " << endl;
-	//    for (map<Statement*, bool>::iterator it = self.begin(); it != self.end(); ++it) {
-	//        cout << it->first->tag() << ": " << boolalpha << it->second << endl;
-	//    }
-	//
-	//    cout << "Reaching: " << endl;
-	//    for (map<Statement*, vector<Expression*>* >::iterator it = reaching.begin(); it != reaching.end(); ++it) {
-	//        cout << it->first->tag() << ": ";
-	//
-	//        vector<Expression*>* reachingDefs = it->second;
-	//
-	//        for (vector<Expression*>::iterator itt = reachingDefs->begin(); itt != reachingDefs->end(); ++itt) {
-	//            cout << **itt << endl;
-	//        }
-	//        cout << endl;
-	//    }
 }
 
 void gcd_test_helper(Expression& expr, int& constItem, int& varItem, int coeff = 1) {
@@ -646,24 +611,38 @@ void print_dd(bool forArray, bool flow, bool output, bool anti) {
 
 void codegen(ProgramUnit& pgm) {
 	cout << "Code Gen" << endl;
+
+	for (map<string, LoopDependence*>::iterator ldIter = loopDependences.begin();
+		ldIter != loopDependences.end();
+		++ldIter) {
+		string loopLabel = ldIter->first;
+		LoopDependence* ld = ldIter->second;
+
+		cout << loopLabel << endl;
+
+		for (set<DataDependence*>::iterator ddIter = scalarFlowDependencies.begin();
+			ddIter != scalarFlowDependencies.end();
+			++ddIter) {
+			DataDependence* dd = *ddIter;
+
+			cout << dd << endl;
+		}
+	}
 }
 
 void ddtest(ProgramUnit & pgm)
 {
-	// TODO: remove
-	int a;
-
 	preprocess(pgm);
 
-	find_LHPs(pgm);
+	//find_LHPs(pgm);
 
-	build_fud_chains(pgm);
+	//build_fud_chains(pgm);
 
-	find_scalar_flow_dd(pgm);
+	//find_scalar_flow_dd(pgm);
 
-	find_scalar_anti_and_output_dd(pgm);
+	//find_scalar_anti_and_output_dd(pgm);
 
-	find_array_dd(pgm);
+	//find_array_dd(pgm);
 
-	codegen(pgm);
+	//codegen(pgm);
 }

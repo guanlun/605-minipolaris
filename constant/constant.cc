@@ -612,6 +612,7 @@ void propagate_constants(ProgramUnit & pgm) {
 		clean_workspace(stmts);
 	} while (hasChange);
 
+    /*
 	RefSet<Symbol> nonConstantSymbols = find_non_constant_symbols(pgm);
 	if (nonConstantSymbols.empty()) {
 		// Playing safe here: do not remove unused variables when non constant symbols exist
@@ -622,4 +623,5 @@ void propagate_constants(ProgramUnit & pgm) {
 			clean_workspace(stmts);
 		} while (hasChange);
 	}
+    */
 };

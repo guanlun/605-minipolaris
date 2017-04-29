@@ -88,11 +88,13 @@ string get_stmt_loop_name(Statement* stmt) {
 
 	while (runner->stmt_class() != DO_STMT) {
 		runner = runner->prev_ref();
+
+		if (runner == NULL) {
+			return "";
+		}
 	}
 
-	if (runner != NULL) {
-		loopName = runner->get_loop_name();
-	}
+	loopName = runner->get_loop_name();
 
 	return loopName;
 }

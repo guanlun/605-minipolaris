@@ -553,6 +553,8 @@ bool stmts_equal(List<Statement>& stmts1, List<Statement>& stmts2) {
         s2.write(sstream2, indent2);
 
         if (s1.stmt_class() != s2.stmt_class()) {
+
+			cout << s1 << endl << s2 << endl;
             return false;
         }
     }
@@ -566,11 +568,12 @@ void subexpr_elimination(ProgramUnit& pgm,
 
 	bool changed;
 	do {
+		cout << "iteration!!!" << endl;
 	    changed = false;
 
-	    binarify_operations(pgm);
+		List<Statement>* oldStmts = stmts.copy(stmts.first(), stmts.last());
 
-        List<Statement>* oldStmts = stmts.copy(stmts.first(), stmts.last());
+	    binarify_operations(pgm);
 
 	    stringstream oldStmtsStr;
 	    stmts.write(oldStmtsStr);
@@ -581,6 +584,8 @@ void subexpr_elimination(ProgramUnit& pgm,
 
         stringstream newStmtsStr;
         pgm.stmts().write(newStmtsStr);
+
+		cout << *oldStmts << "----------------------------------------------------" << endl <<  pgm.stmts() << endl << endl << endl << endl << endl << endl << endl;
 
         changed = !stmts_equal(*oldStmts, pgm.stmts());
 	} while (changed);

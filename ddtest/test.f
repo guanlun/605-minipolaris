@@ -1,10 +1,12 @@
-        PROGRAM TEST4
-        INTEGER*4 a,i,j,t
-        dimension a(10)
-
-        do i=1,10,1
-          t = a
-          b = t
-        enddo
-        STOP
-        END
+        program name 
+        integer*4 i, j,a ,b ,c
+        i = 3
+        j = 4
+        a = i + j + c
+        j = i + j
+        b = j + i
+        c = i + j + d
+        a = b - c
+        j = j
+		print i, j,a ,b ,c
+        end 
