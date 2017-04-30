@@ -55,14 +55,6 @@ map<Expression*, vector<Expression*>* > currUse;
 map<Expression*, vector<Expression*>* > chainUse;
 map<Expression*, vector<Expression*>* > saveChainUse;
 
-set<DataDependence*> scalarFlowDependencies;
-set<DataDependence*> scalarOutputDependencies;
-set<DataDependence*> scalarAntiDependencies;
-
-set<DataDependence*> arrayFlowDependencies;
-set<DataDependence*> arrayOutputDependencies;
-set<DataDependence*> arrayAntiDependencies;
-
 struct LoopDependence {
 	set<DataDependence*> scalarFlowDependencies;
 	set<DataDependence*> scalarOutputDependencies;
@@ -609,24 +601,128 @@ void print_dd(bool forArray, bool flow, bool output, bool anti) {
 	}
 }
 
+bool hasArrayDependence(LoopDependence* ld) {
+	return (
+		!ld->arrayFlowDependencies.empty() || 
+		!ld->arrayAntiDependencies.empty() || 
+		!ld->arrayOutputDependencies.empty()
+	);
+}
+
+void find_scalar_flow_dd_between_stmts(string loopName, Statement& s1, Statement& s2) {
+	Expression* def = get_def_expr(s1);
+
+	if ((def == NULL) || (def->op() != ID_OP)) {
+		return;
+	}
+
+	set<string> addedUseNames;
+
+	for (Iterator<Expression> useIter = s2.in_refs(); useIter.valid(); ++useIter) {
+		Expression& use = useIter.current();
+
+		if (use.op() != ID_OP) {
+			continue;
+		}
+
+		if (*def == use) {
+			cout << "FOUND!!!!!!!!!!!!!! " << *def << " and " << use << endl;
+		}
+	}
+}
+
+bool is_varialbe_privatizable_in_loop(Symbol& sym, Statement& doStmt, StmtList& stmts) {
+	//cout << doStmt.tag() << " " << sym << endl;
+
+	Expression& loopIndexVar = doStmt.index();
+
+	bool defined = false;
+	bool used = false;
+
+	for (Iterator<Statement> stmtIter = stmts.iterate_loop_body(&doStmt); stmtIter.valid(); ++stmtIter) {
+		Statement& stmt = stmtIter.current();
+
+		Expression* defExpr = get_def_expr(stmt);
+
+		if ((defExpr == NULL) || (defExpr->op() != ID_OP)) {
+			continue;
+		}
+
+		Symbol& defSymbol = defExpr->symbol();
+
+		if (sym.name_ref() == defSymbol.name_ref()) {
+			cout << "Symbol " << sym << " is defined in stmt " << stmt.tag() << endl;
+		}
+
+		for (Iterator<Expression> inIter = stmt.in_refs(); inIter.valid(); ++inIter) {
+			Expression& inExpr = inIter.current();
+
+			if (inExpr.op() != ID_OP) {
+				continue;
+			}
+
+			Symbol& useSymbol = inExpr.symbol();
+
+			if (sym.name_ref() == useSymbol.name_ref()) {
+				used = true;
+
+				if (defined) {
+					// Read before write for the symbol. Cannot privatize this variable
+					return false;
+				}
+			}
+		}
+	}
+
+	return (defined && used);
+}
+
 void codegen(ProgramUnit& pgm) {
 	cout << "Code Gen" << endl;
 
-	for (map<string, LoopDependence*>::iterator ldIter = loopDependences.begin();
-		ldIter != loopDependences.end();
-		++ldIter) {
-		string loopLabel = ldIter->first;
-		LoopDependence* ld = ldIter->second;
+	StmtList& stmts = pgm.stmts();
 
-		cout << loopLabel << endl;
+	for (Iterator<Statement> doStmtIter = stmts.stmts_of_type(DO_STMT); doStmtIter.valid(); ++doStmtIter) {
+		Statement& doStmt = doStmtIter.current();
 
-		for (set<DataDependence*>::iterator ddIter = scalarFlowDependencies.begin();
-			ddIter != scalarFlowDependencies.end();
-			++ddIter) {
-			DataDependence* dd = *ddIter;
+		string loopName(doStmt.get_loop_name());
+		LoopDependence* ld = loopDependences[loopName];
 
-			cout << dd << endl;
+		if (hasArrayDependence(ld)) {
+			cout << "Loop " << loopName << " has array dependencies. Pass." << endl;
+			continue;
 		}
+
+		for (DictionaryIter<Symbol> symIter = pgm.symtab().iterator(); symIter.valid(); ++symIter) {
+			Symbol& sym = symIter.current();
+
+			if (sym.sym_class() != VARIABLE_CLASS) {
+				continue;
+			}
+
+			if (is_varialbe_privatizable_in_loop(sym, doStmt, stmts)) {
+				cout << sym << " is privatizable in loop " << loopName << endl;
+			}
+		}
+
+
+		
+
+
+
+		//for (Iterator<Statement> stmtIter1 = stmts.iterate_loop_body(&doStmt); stmtIter1.valid(); ++stmtIter1) {
+		//	Statement& stmt1 = stmtIter1.current();
+
+		//	for (Iterator<Statement> stmtIter2 = stmts.iterate_loop_body(&doStmt); stmtIter2.valid(); ++stmtIter2) {
+		//		Statement& stmt2 = stmtIter2.current();
+
+		//		if (stmts.index(stmt1) >= stmts.index(stmt2)) {
+		//			continue;
+		//		}
+
+		//		find_scalar_flow_dd_between_stmts(loopName, stmt1, stmt2);
+		//	}
+		//}
 	}
 }
 
@@ -634,15 +730,13 @@ void ddtest(ProgramUnit & pgm)
 {
 	preprocess(pgm);
 
-	//find_LHPs(pgm);
+	find_LHPs(pgm);
 
-	//build_fud_chains(pgm);
+	build_fud_chains(pgm);
 
-	//find_scalar_flow_dd(pgm);
+	find_scalar_flow_dd(pgm);
 
-	//find_scalar_anti_and_output_dd(pgm);
+	find_scalar_anti_and_output_dd(pgm);
 
-	//find_array_dd(pgm);
-
-	//codegen(pgm);
+	find_array_dd(pgm);
 }

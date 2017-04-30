@@ -11,4 +11,6 @@ void ddtest(ProgramUnit & pgm);
 
 void print_dd(bool forArray, bool flow, bool output, bool anti);
 
+void codegen(ProgramUnit& pgm);
+
 #endif

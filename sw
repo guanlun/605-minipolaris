@@ -38,7 +38,7 @@ p_bblocks    2	print after basic blocks pass (1 == Fortran form, 2 == all fields
 ssa          1  transform into SSA form (0=dont,1=do)
 p_ssa        2  print after SSA pass (0=dont, 1=do)
 dessa        1  revert from SSA form (0=dont,1=do)
-p_dessa      1  print after deSSA pass (0=dont, 1=FORTRAN,2=detailed)
+p_dessa      2  print after deSSA pass (0=dont, 1=FORTRAN,2=detailed)
 
 # Project 3
 

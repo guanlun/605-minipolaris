@@ -256,6 +256,10 @@ driver(int argc, char *argv[])
             }
         }
 
+        if (switch_value("ddtest"))
+        {
+            codegen(pgm);
+        }
     }
 
     /////////////////////////////////////////////////////////////////
