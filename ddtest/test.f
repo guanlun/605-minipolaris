@@ -4,9 +4,10 @@
 
 		j = n
         do i=1,10,1
-          t = b(i) + b(j)
-		  n = t + a(i)
-          j = j - 1
+          j = b(i + 1)
+		  t = a(i)
+		  a(i + 1) = j+2;
+		  a(i) = t
         enddo
 		
         STOP

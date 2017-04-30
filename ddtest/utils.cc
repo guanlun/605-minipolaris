@@ -98,3 +98,14 @@ string get_stmt_loop_name(Statement* stmt) {
 
 	return loopName;
 }
+
+bool expr_match_symbol(Expression& expr, Symbol& sym) {
+	if (expr.op() != ID_OP) {
+		return false;
+	}
+
+	string exprName(expr.symbol().name_ref());
+	string symName(sym.name_ref());
+
+	return (strcasecmp(exprName.c_str(), symName.c_str()) == 0);
+}

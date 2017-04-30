@@ -73,5 +73,3 @@ p_avail      1
 
 ddtest       1
 p_ddtest     2
-
-print        0

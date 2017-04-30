@@ -632,9 +632,12 @@ void find_scalar_flow_dd_between_stmts(string loopName, Statement& s1, Statement
 }
 
 bool is_varialbe_privatizable_in_loop(Symbol& sym, Statement& doStmt, StmtList& stmts) {
-	//cout << doStmt.tag() << " " << sym << endl;
-
 	Expression& loopIndexVar = doStmt.index();
+
+	if (expr_match_symbol(loopIndexVar, sym)) {
+		// The symbol is the loop index itself, no need to privatize it.
+		return false;
+	}
 
 	bool defined = false;
 	bool used = false;
@@ -644,29 +647,23 @@ bool is_varialbe_privatizable_in_loop(Symbol& sym, Statement& doStmt, StmtList& 
 
 		Expression* defExpr = get_def_expr(stmt);
 
-		if ((defExpr == NULL) || (defExpr->op() != ID_OP)) {
+		if (defExpr == NULL) {
 			continue;
 		}
 
-		Symbol& defSymbol = defExpr->symbol();
-
-		if (sym.name_ref() == defSymbol.name_ref()) {
-			cout << "Symbol " << sym << " is defined in stmt " << stmt.tag() << endl;
+		if (expr_match_symbol(*defExpr, sym)) {
+			defined = true;
+			//cout << "Symbol " << sym << " is defined in stmt " << stmt.tag() << endl;
+			continue;
 		}
 
 		for (Iterator<Expression> inIter = stmt.in_refs(); inIter.valid(); ++inIter) {
 			Expression& inExpr = inIter.current();
 
-			if (inExpr.op() != ID_OP) {
-				continue;
-			}
-
-			Symbol& useSymbol = inExpr.symbol();
-
-			if (sym.name_ref() == useSymbol.name_ref()) {
+			if (expr_match_symbol(inExpr, sym)) {
 				used = true;
 
-				if (defined) {
+				if (!defined) {
 					// Read before write for the symbol. Cannot privatize this variable
 					return false;
 				}
@@ -675,6 +672,34 @@ bool is_varialbe_privatizable_in_loop(Symbol& sym, Statement& doStmt, StmtList& 
 	}
 
 	return (defined && used);
+}
+
+void parallelize_loop(Statement& doStmt, set<Symbol*>& privatizableSymbols) {
+	stringstream symNameSS;
+	symNameSS << "!$OMP PARALLEL private(";
+
+	int symIdx = 0;
+	for (set<Symbol*>::iterator symIter = privatizableSymbols.begin();
+		symIter != privatizableSymbols.end();
+		++symIter, ++symIdx) {
+		Symbol* sym = *symIter;
+
+		string symName(sym->name_ref());
+		
+		symNameSS << symName.c_str();
+
+		if (symIdx != (privatizableSymbols.size() - 1)) {
+			symNameSS << ", ";
+		}
+	}
+
+	symNameSS << ")";
+
+	doStmt.pre_directives().ins_first(new StringElem("!$OMP DO"));
+	doStmt.pre_directives().ins_first(new StringElem(symNameSS.str().c_str()));
+
+	Statement& enddoStmt = *doStmt.follow_ref();
+	enddoStmt.post_directives().ins_last(new StringElem("!$END PARALLEL"));
 }
 
 void codegen(ProgramUnit& pgm) {
@@ -693,6 +718,8 @@ void codegen(ProgramUnit& pgm) {
 			continue;
 		}
 
+		set<Symbol*> privatizableSymbols;
+
 		for (DictionaryIter<Symbol> symIter = pgm.symtab().iterator(); symIter.valid(); ++symIter) {
 			Symbol& sym = symIter.current();
 
@@ -702,10 +729,14 @@ void codegen(ProgramUnit& pgm) {
 
 			if (is_varialbe_privatizable_in_loop(sym, doStmt, stmts)) {
 				cout << sym << " is privatizable in loop " << loopName << endl;
+
+				privatizableSymbols.insert(&sym);
 			}
 		}
 
-
+		if (!privatizableSymbols.empty()) {
+			parallelize_loop(doStmt, privatizableSymbols);
+		}
 		
 
 
