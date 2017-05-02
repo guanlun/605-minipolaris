@@ -502,10 +502,12 @@ void propagate_copies(ProgramUnit& pgm) {
 	for (Iterator<Statement> defIter = stmts.stmts_of_type(ASSIGNMENT_STMT); defIter.valid(); ++defIter) {
 		Statement& defStmt = defIter.current();
 
+		cout << defStmt << endl;
+
 		Expression& copiedVar = defStmt.rhs();
 		Expression& definedVar = defStmt.lhs();
 
-		if (defStmt.rhs().op() != ID_OP) {
+		if ((defStmt.rhs().op() != ID_OP) || (defStmt.lhs().op() != ID_OP)) {
 			continue;
 		}
 
@@ -553,8 +555,6 @@ bool stmts_equal(List<Statement>& stmts1, List<Statement>& stmts2) {
         s2.write(sstream2, indent2);
 
         if (s1.stmt_class() != s2.stmt_class()) {
-
-			cout << s1 << endl << s2 << endl;
             return false;
         }
     }
@@ -568,7 +568,6 @@ void subexpr_elimination(ProgramUnit& pgm,
 
 	bool changed;
 	do {
-		cout << "iteration!!!" << endl;
 	    changed = false;
 
 		List<Statement>* oldStmts = stmts.copy(stmts.first(), stmts.last());
@@ -584,8 +583,6 @@ void subexpr_elimination(ProgramUnit& pgm,
 
         stringstream newStmtsStr;
         pgm.stmts().write(newStmtsStr);
-
-		cout << *oldStmts << "----------------------------------------------------" << endl <<  pgm.stmts() << endl << endl << endl << endl << endl << endl << endl;
 
         changed = !stmts_equal(*oldStmts, pgm.stmts());
 	} while (changed);

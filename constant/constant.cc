@@ -280,7 +280,7 @@ void detect_in_out_sets(ProgramUnit& pgm, RefSet<Symbol>& nonConstantSymbols, bo
 			if (stmt.stmt_class() == ASSIGNMENT_STMT) {
 				Expression& lhsExpr = stmt.lhs();
 				OP_TYPE opType = lhsExpr.op();
-				if ((opType == ID_OP) || (opType == ARRAY_REF_OP)) {
+				if (opType == ID_OP) {
 					Symbol& assignedSymbol = *stmt.lhs().base_variable_ref();
 
 					if (!nonConstantSymbols.member(assignedSymbol)) {

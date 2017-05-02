@@ -213,6 +213,11 @@ void find_scalar_anti_and_output_dd(ProgramUnit& pgm) {
 
 		string loopName(doStmt.get_loop_name());
 
+		// Clear the previous dependencies
+		LoopDependence* ld = loopDependences[loopName];
+		ld->scalarAntiDependencies.clear();
+		ld->scalarOutputDependencies.clear();
+
 		map<Symbol*, Statement*> readLookup;
 		map<Symbol*, Statement*> writeLookup;
 
@@ -320,13 +325,15 @@ void find_reaching(Expression* def, Statement* lhp, int depth = 0) {
 }
 
 void find_dependence(Expression* def, Expression* use, int depth = 0) {
-	if (marked[def] == use) {
+	if ((def == NULL) || (use == NULL) || (marked[def] == use)) {
 		return;
 	}
 
 	marked[def] = use;
 
 	Statement* defStmt = exprStmtLookup[def];
+
+	cout << def << "   " << defStmt << endl;
 
 	if (lhps.find(defStmt) != lhps.end()) {
 		vector<Expression*> phiChain = *phiChains[def];
@@ -601,34 +608,14 @@ void print_dd(bool forArray, bool flow, bool output, bool anti) {
 	}
 }
 
-bool hasArrayDependence(LoopDependence* ld) {
+bool is_privatizable(LoopDependence* ld) {
 	return (
-		!ld->arrayFlowDependencies.empty() || 
-		!ld->arrayAntiDependencies.empty() || 
-		!ld->arrayOutputDependencies.empty()
+		ld->arrayFlowDependencies.empty() &&
+		ld->arrayAntiDependencies.empty() &&
+		ld->arrayOutputDependencies.empty() &&
+		ld->scalarOutputDependencies.empty() &&
+		ld->scalarAntiDependencies.empty()
 	);
-}
-
-void find_scalar_flow_dd_between_stmts(string loopName, Statement& s1, Statement& s2) {
-	Expression* def = get_def_expr(s1);
-
-	if ((def == NULL) || (def->op() != ID_OP)) {
-		return;
-	}
-
-	set<string> addedUseNames;
-
-	for (Iterator<Expression> useIter = s2.in_refs(); useIter.valid(); ++useIter) {
-		Expression& use = useIter.current();
-
-		if (use.op() != ID_OP) {
-			continue;
-		}
-
-		if (*def == use) {
-			cout << "FOUND!!!!!!!!!!!!!! " << *def << " and " << use << endl;
-		}
-	}
 }
 
 bool is_varialbe_privatizable_in_loop(Symbol& sym, Statement& doStmt, StmtList& stmts) {
@@ -676,7 +663,13 @@ bool is_varialbe_privatizable_in_loop(Symbol& sym, Statement& doStmt, StmtList& 
 
 void parallelize_loop(Statement& doStmt, set<Symbol*>& privatizableSymbols) {
 	stringstream symNameSS;
-	symNameSS << "!$OMP PARALLEL private(";
+	bool hasPrivatizableSymbol = !privatizableSymbols.empty();
+
+	symNameSS << "!$OMP PARALLEL";
+
+	if (hasPrivatizableSymbol) {
+		symNameSS << " private(";
+	}
 
 	int symIdx = 0;
 	for (set<Symbol*>::iterator symIter = privatizableSymbols.begin();
@@ -693,7 +686,9 @@ void parallelize_loop(Statement& doStmt, set<Symbol*>& privatizableSymbols) {
 		}
 	}
 
-	symNameSS << ")";
+	if (hasPrivatizableSymbol) {
+		symNameSS << ")";
+	}
 
 	doStmt.pre_directives().ins_first(new StringElem("!$OMP DO"));
 	doStmt.pre_directives().ins_first(new StringElem(symNameSS.str().c_str()));
@@ -703,9 +698,10 @@ void parallelize_loop(Statement& doStmt, set<Symbol*>& privatizableSymbols) {
 }
 
 void codegen(ProgramUnit& pgm) {
-	cout << "Code Gen" << endl;
-
 	StmtList& stmts = pgm.stmts();
+
+	// Find scalar anti and flow dependencies again, this time after deSSA.
+	find_scalar_anti_and_output_dd(pgm);
 
 	for (Iterator<Statement> doStmtIter = stmts.stmts_of_type(DO_STMT); doStmtIter.valid(); ++doStmtIter) {
 		Statement& doStmt = doStmtIter.current();
@@ -713,8 +709,7 @@ void codegen(ProgramUnit& pgm) {
 		string loopName(doStmt.get_loop_name());
 		LoopDependence* ld = loopDependences[loopName];
 
-		if (hasArrayDependence(ld)) {
-			cout << "Loop " << loopName << " has array dependencies. Pass." << endl;
+		if (!is_privatizable(ld)) {
 			continue;
 		}
 
@@ -728,37 +723,23 @@ void codegen(ProgramUnit& pgm) {
 			}
 
 			if (is_varialbe_privatizable_in_loop(sym, doStmt, stmts)) {
-				cout << sym << " is privatizable in loop " << loopName << endl;
-
 				privatizableSymbols.insert(&sym);
 			}
 		}
 
-		if (!privatizableSymbols.empty()) {
-			parallelize_loop(doStmt, privatizableSymbols);
-		}
-		
-
-
-
-		//for (Iterator<Statement> stmtIter1 = stmts.iterate_loop_body(&doStmt); stmtIter1.valid(); ++stmtIter1) {
-		//	Statement& stmt1 = stmtIter1.current();
-
-		//	for (Iterator<Statement> stmtIter2 = stmts.iterate_loop_body(&doStmt); stmtIter2.valid(); ++stmtIter2) {
-		//		Statement& stmt2 = stmtIter2.current();
-
-		//		if (stmts.index(stmt1) >= stmts.index(stmt2)) {
-		//			continue;
-		//		}
-
-		//		find_scalar_flow_dd_between_stmts(loopName, stmt1, stmt2);
-		//	}
-		//}
+		parallelize_loop(doStmt, privatizableSymbols);
 	}
 }
 
 void ddtest(ProgramUnit & pgm)
 {
+	StmtList& stmts = pgm.stmts();
+
+	if (!stmts.stmts_of_type(DO_STMT).current_valid()) {
+		cout << "No loop found, skip ddtest." << endl;
+		return;
+	}
+
 	preprocess(pgm);
 
 	find_LHPs(pgm);

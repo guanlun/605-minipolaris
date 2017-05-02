@@ -1,14 +1,17 @@
         PROGRAM TEST4
-        INTEGER*4 a,i,j,t,n
-        dimension a(10), b(10)
-
-		j = n
-        do i=1,10,1
-          j = b(i + 1)
-		  t = a(i)
-		  a(i + 1) = j+2;
-		  a(i) = t
-        enddo
-		
+        INTEGER*4 i,j, n
+        DATA l /4/
+        i = 4
+        j = i + 5
+        a = 4
+        b = 6
+       IF ( s .EQ. 5) THEN
+         a = i + j
+        ELSE
+         b = i + j
+        ENDIF
+        s = i + j
+        s = s + a + b
+        PRINT *, j
         STOP
         END

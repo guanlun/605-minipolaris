@@ -6,7 +6,6 @@ bool is_stmt_with_named_func(Statement& stmt, const char* name) {
 	}
 
 	const Expression& rhs = stmt.rhs();
-
 	if (rhs.op() != FUNCTION_CALL_OP) {
 		return false;
 	}
@@ -57,7 +56,6 @@ int find_gcd(int a, int b) {
 }
 
 Expression* replace_ssa_expression(Expression* expr, Expression* oldExpr, Expression* newExpr) {
-	//    cout << "replacing " << *oldExpr << " with " << *newExpr << " in " << *expr << endl;
 	if (*expr == *oldExpr) {
 		return newExpr->clone();
 	}
